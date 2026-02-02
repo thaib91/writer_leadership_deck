@@ -1,0 +1,6 @@
+# Dependencies and build
+node_modules/
+dist/
+
+# Wedding invitation (excluded from repo)
+wedding-invitation/
