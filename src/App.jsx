@@ -1,6 +1,9 @@
 import React, { useState, useRef, useEffect, createContext, useContext, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { select } from 'd3-selection';
 import { scaleLinear } from 'd3-scale';
+import { line, curveMonotoneX } from 'd3-shape';
+import { axisBottom, axisLeft } from 'd3-axis';
 import 'd3-transition'; // extends selection with .transition()
 
 // Edit Mode Context
@@ -72,21 +75,22 @@ const useLocalStorage = (key, initialValue) => {
   const [storedValue, setStoredValue] = useState(() => {
     const stored = loadFromStorage(key, initialValue);
 
-    // For overviewContent, update context and opportunity arrays with new defaults
+    // For overviewContent, update context, strategicBets, strategicPriorities with new defaults
     // Check version to force update when defaults change
     if (key === 'leadershipPlaybook_overviewContent' && stored && initialValue) {
       const storedVersion = stored._version || 0;
-      const currentVersion = 3; // Increment this when updating defaults (3 = 10/20/30 day opportunity bullets)
+      const currentVersion = 6; // 6 = Strategic Priorities exact content
 
       if (storedVersion < currentVersion) {
         const updated = { ...stored };
-        // Replace context and opportunity with new defaults
-        if (Array.isArray(initialValue.context)) {
-          updated.context = initialValue.context;
-        }
-        if (Array.isArray(initialValue.opportunity)) {
-          updated.opportunity = initialValue.opportunity;
-        }
+        if (Array.isArray(initialValue.context)) updated.context = initialValue.context;
+        if (Array.isArray(initialValue.strategicBets)) updated.strategicBets = initialValue.strategicBets;
+        // Strategic Priorities: always set to these three bullets
+        updated.strategicPriorities = [
+          'Shift SAs from "demo monkey" to strategic partner (ROI storytelling, business acumen)',
+          'Fix Writer Agent positioning—complement, not replacement',
+          'Establish guardrails: what scales in post-sales vs. custom builds'
+        ];
         updated._version = currentVersion;
         saveToStorage(key, updated);
         return updated;
@@ -339,7 +343,7 @@ const Card = ({ children, style = {} }) => (
   </div>
 );
 
-// Stat Card
+// Stat Card (static)
 const StatCard = ({ value, label, suffix = '', color = colors.accent }) => (
   <div style={{ 
     textAlign: 'center', 
@@ -388,13 +392,79 @@ const SectionHeader = ({ number, title, subtitle }) => (
   </div>
 );
 
+// Modal content for each Leadership Principle (full detail shown on card click)
+const PRINCIPLE_MODAL_CONTENT = [
+  {
+    title: 'Coaching for Outcomes',
+    framework: 'The 3D Coaching Model',
+    frameworkSub: 'Define → Develop → Delegate',
+    frameworkDesc: 'This framework mirrors how top SAs already operate with customers—clarifying success criteria, building capability, then stepping back. It scales your personal approach by teaching the method, not just the motion.',
+    guidelines: [
+      'Start each engagement by co-creating an outcome contract with the SA: "What does success look like? How will we measure it?" Then step back from the how',
+      'Replace status updates with 15-minute "outcome check-ins" focused on blockers, not activity',
+      'Run post-deal retrospectives that ask "what worked, what would you replicate?" to build your "How the best SAs work" playbook',
+      'Shadow your SAs on complex deals, then have them shadow you—coach only when asked'
+    ],
+    examplesInPractice: [
+      'Coaching the local West SA team and mentoring on best practices to get ramped up as quickly as possible.',
+      'Weekly cadence so they feel like they\'re progressing and building bespoke growth plans so they have a target to always reach—focus on small chunks of goals vs. one large goal that takes time.'
+    ]
+  },
+  {
+    title: 'Ruthless Prioritization',
+    framework: 'ICE Scoring for Team Capacity',
+    frameworkSub: 'Impact × Confidence × Effort = Priority Score',
+    frameworkDesc: 'ICE gives the team a shared language for tradeoffs. Instead of debating opinions about what matters, you\'re calibrating on three variables everyone can assess. It removes the subjectivity that slows down prioritization conversations.',
+    guidelines: [
+      'Maintain a quarterly "stop doing" list—identify 2-3 activities the team will explicitly deprioritize and make it visible',
+      'Implement a deal qualification rubric so effort matches opportunity value',
+      'Have each SA identify their single highest-leverage activity weekly; track patterns across the team',
+      'Conduct monthly calendar audits: "What percentage of time went to top 3 accounts?" Coach toward 70%+'
+    ],
+    examplesInPractice: [
+      'Working across partnerships, normal GTM opportunities, owning tech partnership integrations and builds, coaching/mentoring, and ad hoc engagements such as webinars, conferences, speaking at events and trainings. Ruthless prioritization is a common practice.'
+    ]
+  },
+  {
+    title: 'Culture Building Under Volatility',
+    framework: 'SCARF Model (David Rock)',
+    frameworkSub: 'Status, Certainty, Autonomy, Relatedness, Fairness',
+    frameworkDesc: 'SCARF identifies the five domains where people feel most threatened during change. By proactively addressing each—especially certainty and status during reorgs—you reduce the cognitive load that kills performance when things get ambiguous.',
+    guidelines: [
+      'Share transparent "what I know / what I don\'t know" updates during uncertainty, even when nothing has changed',
+      'Hold monthly "state of the team" sessions: wins, challenges, what leadership is hearing—no spin',
+      'Pair struggling SAs with thriving ones through deal co-ownership, not formal mentorship',
+      'Name tension when you sense it: "This feels off. Let\'s talk about why."'
+    ],
+    examplesInPractice: [
+      'Building trust and respect among peers and having them vouch for me being their manager to continue building that trust and push for what\'s best for the West SA team in terms of objective and subjective growth.'
+    ]
+  },
+  {
+    title: 'Hiring for Ambiguity',
+    framework: 'Structured Behavioral Interviewing for Adaptability',
+    frameworkSub: 'Past behavior → Situational judgment → Values alignment',
+    frameworkDesc: 'Traditional interviews reward polish and preparation. This structure specifically surfaces how candidates behave when the path isn\'t clear—which is the actual job. Past ambiguity navigation predicts future ambiguity navigation better than hypotheticals.',
+    guidelines: [
+      'Use a "messy case study" interview with an intentionally incomplete brief—evaluate navigation, not correctness',
+      'Ask references about trajectory: "How much did they grow in months 1-6 vs. 6-12?"',
+      'Assign new SAs a real deal in week 2, not week 8—observe how they respond to ambiguity early',
+      'Conduct a 90-day "trust checkpoint" to calibrate where you\'ve been too hands-on vs. where they need more support'
+    ],
+    examplesInPractice: [
+      'Have been on the hiring panel for almost 80% of the current SAs; the team has kept our bar of talent top tier.'
+    ]
+  }
+];
+
 // Leadership Principles Section
 const LeadershipPrinciplesSection = () => {
   const { isEditMode } = useContext(EditModeContext);
+  const [modalPrincipleIndex, setModalPrincipleIndex] = useState(null);
   
   const [philosophy, setPhilosophy] = useLocalStorage(
     'leadershipPlaybook_philosophy',
-    'Scale individual contributor success into systematic processes. Document "how Thai does work" for team replication. Build trust through coaching for outcomes, not micromanaging.'
+    'Scale individual contributor success into systematic processes. Document "How the best SA\'s work" for team replication. Build trust through coaching for outcomes, not micromanaging.'
   );
 
   const [principles, setPrinciples] = useLocalStorage('leadershipPlaybook_principles', [
@@ -464,43 +534,160 @@ const LeadershipPrinciplesSection = () => {
         </p>
       </Card>
 
-      {/* Principles Grid */}
+      {/* Principles Grid — click card to open modal with full detail */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px', marginBottom: '24px' }}>
         {principles.map((principle, i) => (
-          <Card key={i} style={{ borderLeft: `4px solid ${principle.color}` }}>
-            <h3 style={{ fontSize: '18px', fontWeight: '600', color: colors.text, marginBottom: '8px' }}>
-              <EditableText
-                value={principle.title}
-                onChange={(v) => updatePrinciple(i, 'title', v)}
-                style={{ fontSize: '18px', fontWeight: '600', color: colors.text }}
-              />
-            </h3>
-            <p style={{ fontSize: '14px', color: colors.textSecondary, marginBottom: '12px' }}>
-              <EditableText
-                value={principle.description}
-                onChange={(v) => updatePrinciple(i, 'description', v)}
-                style={{ fontSize: '14px', color: colors.textSecondary }}
-                multiline
-              />
-            </p>
-            <div style={{ 
-              padding: '8px 12px', 
-              backgroundColor: principle.color + '10', 
-              borderRadius: '6px',
-              marginTop: '12px'
-            }}>
-              <p style={{ fontSize: '12px', fontWeight: '600', color: principle.color, marginBottom: '4px' }}>Example:</p>
-              <p style={{ fontSize: '12px', color: colors.textSecondary, margin: 0 }}>
+          <div
+            key={i}
+            role="button"
+            tabIndex={0}
+            onClick={() => !isEditMode && setModalPrincipleIndex(i)}
+            onKeyDown={(e) => !isEditMode && (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), setModalPrincipleIndex(i))}
+            onMouseEnter={(e) => { if (!isEditMode) e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.boxShadow = 'none'; }}
+            style={{
+              cursor: isEditMode ? 'default' : 'pointer',
+              transition: 'box-shadow 0.2s ease',
+              outline: 'none',
+              display: 'flex',
+              flexDirection: 'column',
+              minHeight: 0
+            }}
+          >
+            <Card style={{ borderLeft: `4px solid ${principle.color}`, flex: 1, minHeight: 0, boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
+              <h3 style={{ fontSize: '18px', fontWeight: '600', color: colors.text, marginBottom: '8px' }}>
                 <EditableText
-                  value={principle.example}
-                  onChange={(v) => updatePrinciple(i, 'example', v)}
-                  style={{ fontSize: '12px', color: colors.textSecondary }}
+                  value={principle.title}
+                  onChange={(v) => updatePrinciple(i, 'title', v)}
+                  style={{ fontSize: '18px', fontWeight: '600', color: colors.text }}
+                />
+              </h3>
+              <p style={{ fontSize: '14px', color: colors.textSecondary, marginBottom: '12px' }}>
+                <EditableText
+                  value={principle.description}
+                  onChange={(v) => updatePrinciple(i, 'description', v)}
+                  style={{ fontSize: '14px', color: colors.textSecondary }}
+                  multiline
                 />
               </p>
-            </div>
-          </Card>
+              <div style={{ 
+                padding: '8px 12px', 
+                backgroundColor: principle.color + '10', 
+                borderRadius: '6px',
+                marginTop: '12px'
+              }}>
+                <p style={{ fontSize: '12px', fontWeight: '600', color: principle.color, marginBottom: '4px' }}>Example:</p>
+                <p style={{ fontSize: '12px', color: colors.textSecondary, margin: 0 }}>
+                  <EditableText
+                    value={principle.example}
+                    onChange={(v) => updatePrinciple(i, 'example', v)}
+                    style={{ fontSize: '12px', color: colors.textSecondary }}
+                  />
+                </p>
+              </div>
+            </Card>
+          </div>
         ))}
       </div>
+
+      {/* Principle detail modal — centered, blurred backdrop (portal to body so it appears on top) */}
+      {modalPrincipleIndex !== null && typeof document !== 'undefined' && (() => {
+        const content = PRINCIPLE_MODAL_CONTENT[modalPrincipleIndex];
+        const principle = principles[modalPrincipleIndex];
+        if (!content || !principle) return null;
+        const appFont = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+        const modalEl = (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 10000,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '24px',
+              backgroundColor: 'rgba(0,0,0,0.35)',
+              backdropFilter: 'blur(6px)',
+              WebkitBackdropFilter: 'blur(6px)',
+              fontFamily: appFont,
+              color: colors.text,
+              lineHeight: 1.6,
+              fontSize: '14px'
+            }}
+            onClick={() => setModalPrincipleIndex(null)}
+          >
+            <div
+              style={{
+                backgroundColor: colors.bg,
+                borderRadius: '12px',
+                maxWidth: '560px',
+                width: '100%',
+                maxHeight: '85vh',
+                overflow: 'auto',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.05), 0 24px 48px rgba(0,0,0,0.15)',
+                border: `1px solid ${colors.border}`,
+                position: 'relative',
+                fontFamily: appFont,
+                fontSize: '14px',
+                color: colors.text
+              }}
+              onClick={e => e.stopPropagation()}
+            >
+              <div style={{ padding: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+                  <h3 style={{ fontFamily: appFont, fontSize: '18px', fontWeight: '600', color: colors.text, margin: 0, paddingRight: '36px' }}>{content.title}</h3>
+                  <button
+                    type="button"
+                    onClick={() => setModalPrincipleIndex(null)}
+                    style={{
+                      position: 'absolute',
+                      top: '16px',
+                      right: '16px',
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      backgroundColor: colors.surface,
+                      color: colors.textMuted,
+                      fontFamily: appFont,
+                      fontSize: '18px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      lineHeight: 1
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+                <div style={{ marginBottom: '16px', padding: '16px', backgroundColor: principle.color + '12', borderRadius: '10px', borderLeft: `4px solid ${principle.color}` }}>
+                  <p style={{ fontFamily: appFont, fontSize: '12px', fontWeight: '600', color: principle.color, margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Framework: {content.framework}</p>
+                  <p style={{ fontFamily: appFont, fontSize: '14px', fontWeight: '600', color: colors.text, margin: '0 0 8px' }}>{content.frameworkSub}</p>
+                  <p style={{ fontFamily: appFont, fontSize: '14px', color: colors.textSecondary, lineHeight: 1.6, margin: 0 }}>{content.frameworkDesc}</p>
+                </div>
+                {content.examplesInPractice && content.examplesInPractice.length > 0 && (
+                  <>
+                    <p style={{ fontFamily: appFont, fontSize: '12px', fontWeight: '600', color: colors.textMuted, marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Examples in practice</p>
+                    <ul style={{ margin: '0 0 16px', paddingLeft: '20px', fontFamily: appFont, fontSize: '14px', color: colors.textSecondary, lineHeight: 1.6 }}>
+                      {content.examplesInPractice.map((example, j) => (
+                        <li key={j} style={{ marginBottom: '8px' }}>{example}</li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+                <p style={{ fontFamily: appFont, fontSize: '12px', fontWeight: '600', color: colors.textMuted, marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Principal Guidelines</p>
+                <ul style={{ margin: 0, paddingLeft: '20px', fontFamily: appFont, fontSize: '14px', color: colors.textSecondary, lineHeight: 1.6 }}>
+                  {content.guidelines.map((guideline, j) => (
+                    <li key={j} style={{ marginBottom: '8px' }}>{guideline}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        );
+        return createPortal(modalEl, document.body);
+      })()}
 
       {/* Feedback Received */}
       <Card>
@@ -574,7 +761,7 @@ const HiringTeamDesignSection = () => {
 
   const [balance, setBalance] = useLocalStorage(
     'leadershipPlaybook_balance',
-    'Technical depth is non-negotiable—SAs must have credibility with developers. GTM impact comes from connecting tech to business outcomes. Growth potential ensures we can develop SAs beyond initial hire, especially for security conversations and consultative approach.'
+    'Technical depth matters where SAs work with developers—they need real credibility with engineering teams and the ability to go deep on architecture, integrations, and implementation. Business acumen matters where SAs work with executives and non-technical stakeholders—they need to translate technical value into business outcomes, ROI, and strategy. The balancing act is hiring and developing people who can hold their own in both worlds: deep enough technically to earn developer trust, and fluent enough in business to influence decisions and close with leadership.'
   );
 
   const [internalVsExternal, setInternalVsExternal] = useLocalStorage('leadershipPlaybook_internalVsExternal', {
@@ -594,8 +781,8 @@ const HiringTeamDesignSection = () => {
 
   const [maintainingCulture, setMaintainingCulture] = useLocalStorage('leadershipPlaybook_maintainingCulture', {
     currentTeam: [
-      'Document "how Thai does work" for team replication—systematic processes vs ad-hoc execution',
-      'Preserve collaborative working style: Thai, Nick, Burton can run deals soup-to-nuts',
+      'Document "How the best SA\'s work" for team replication—systematic processes vs ad-hoc execution',
+      'Preserve collaborative working style: the best SAs can run deals soup-to-nuts',
       'Maintain individual working styles: some SAs are technical builders, others more business-forward',
       'Keep 40-hour work week maximum—additional headcount for overages, not burnout'
     ],
@@ -1087,29 +1274,89 @@ const GTMImpactSection = () => {
     ]
   });
 
-  const [salesPartnership, setSalesPartnership] = useLocalStorage('leadershipPlaybook_salesPartnership', {
-    philosophy: 'AEs drive the bus and set the table; SAs collaborate on technical storytelling.',
-    bestPractices: [
-      'Knowledge sharing and thought leadership',
-      'Credibility building with technical stakeholders',
-      'Joint deal planning and timeline ownership',
-      'Proactive sharing of relevant content/demos by vertical'
+  const defaultPartnerSARules = {
+    coreMission: 'Enable partners to pitch Writer and co-sell effectively while driving revenue through "Manage and Operate" motions with GSIs.',
+    fourPillars: 'The Partner SA function operates across four key areas: generating validated sales opportunities tied to ROI, building scalable enablement frameworks ("train the trainer" approach), supporting product changes with talk tracks, and providing internal team training.',
+    ecosystemStructure: 'Writer\'s ecosystem spans six partner categories: Infrastructure/Technology partnerships (hyperscalers, security, developer platforms), Product Partners (connectors), Service Providers split between G/SIs for advisory versus manage-and-operate work, Data Licensing partnerships, Strategic embed/OEM relationships, and niche SI/AI native partners including MSPs, BPOs, and agencies.',
+    tier1: [
+      'Active partnerships with revenue commitment, executive sponsorship, and Writer involvement in POC criteria',
+      'Advanced training, sandbox access, POC development support, priority Slack support, joint planning, and call support'
     ],
-    currentGaps: [
-      'No standardized handoff processes between AEs and SAs',
-      'Reactive SA involvement vs strategic inclusion from opportunity start',
-      'Ambiguity around when to engage SAs and collaboration expectations',
-      'New hires lack coaching—thrown into role as "tech support"',
-      'SAs not proactive in deal communication/strategy'
+    tier2: [
+      'Official agreements with certifications and specific client opportunities identified',
+      'Standard training, sandbox access, limited weekly technical consultation, documentation, office hours, and call support'
+    ],
+    tier3: [
+      'Early-stage discussions with use cases identified',
+      'Intro workshops, public docs, monthly webinars, and basic demo access'
+    ],
+    incubationDeliverables: [
+      'Market/product/competition enablement',
+      'Joint solution builds for reusable assets',
+      'Joint GTM solution maps',
+      'Quarterly product reviews'
+    ],
+    cosellDeliverables: [
+      'Technical scoping',
+      'Technical support for executive meetings',
+      'Use case workshops',
+      'Joint demo/solution builds',
+      'Escalation paths to product and engineering'
+    ],
+    hyperscalerDeliverables: [
+      'Platform enablement',
+      'Technical discussions on model integration and compliance',
+      'Use case workshops',
+      'Quarterly updates'
+    ],
+    techPartnershipDeliverables: [
+      'Demo and enablement',
+      'Customer/use case mapping',
+      'Integration discovery (MCP, API, OEM, Embed)',
+      'Quarterly reviews'
+    ],
+    partnerSAOwns: [
+      'Enablement',
+      'Sandbox access, office hours during active opportunities',
+      'Solution process mapping',
+      'Reusable demo assets',
+      'Thought leadership on AI scaling'
+    ],
+    partnerManagersOwn: [
+      'Onboarding',
+      'Engagement management',
+      'ROI/business case development',
+      'Relationship management',
+      'Expectation setting',
+      'Cross-functional alignment'
+    ],
+    currentConstraints: [
+      'Only two Partner SAs supporting all engagements',
+      'Longer sales cycles compared to direct sales',
+      'Different engagement patterns across partner types (Data Partners, Hyperscalers, etc.)'
+    ],
+    guardRails: [
+      'Fishing expeditions without specific opportunities',
+      'Training without business justification',
+      'Support for non-partners',
+      'Generic capability presentations',
+      'Context-free competitive intelligence requests',
+      'Support for non-engaged clients on AI Studio/Agent Builder'
     ]
-  });
+  };
 
-  const [productPartnership, setProductPartnership] = useLocalStorage('leadershipPlaybook_productPartnership', [
-    'Meet with Product leadership for feedback loop',
-    'Ryan Harris working with product team on customer requirements',
-    'Orchestration layer clarity for playbook-to-agent workflows',
-    'Applications focus and Codeful experience prioritization'
-  ]);
+  const [partnerSARules, setPartnerSARules] = useLocalStorage('leadershipPlaybook_partnerSARules', defaultPartnerSARules);
+
+  const updatePartnerSARules = (key, value) => setPartnerSARules(prev => ({ ...prev, [key]: value }));
+  const updatePartnerSARulesList = (key, index, value) =>
+    setPartnerSARules(prev => ({
+      ...prev,
+      [key]: prev[key].map((item, i) => (i === index ? value : item))
+    }));
+  const addPartnerSARulesListItem = (key) =>
+    setPartnerSARules(prev => ({ ...prev, [key]: [...(prev[key] || []), 'New item - click to edit'] }));
+  const deletePartnerSARulesListItem = (key, index) =>
+    setPartnerSARules(prev => ({ ...prev, [key]: prev[key].filter((_, i) => i !== index) }));
 
   return (
     <div>
@@ -1279,245 +1526,208 @@ const GTMImpactSection = () => {
 
       {activeTab === 'partnerships' && (
         <div>
-          <Card style={{ marginBottom: '24px', backgroundColor: colors.accent + '10', border: `1px solid ${colors.accent}30` }}>
-            <h3 style={{ fontSize: '16px', fontWeight: '600', color: colors.text, marginBottom: '12px' }}>Sales Partnership Philosophy</h3>
-            <p style={{ fontSize: '15px', color: colors.textSecondary, fontStyle: 'italic', margin: 0 }}>
-              <EditableText
-                value={salesPartnership.philosophy}
-                onChange={(v) => setSalesPartnership({ ...salesPartnership, philosophy: v })}
-                style={{ fontSize: '15px', color: colors.textSecondary, fontStyle: 'italic' }}
-              />
+          {/* V1 Functional Org / Ecosystem chart */}
+          <Card style={{ marginBottom: '28px', overflow: 'hidden' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: '600', color: colors.text, marginBottom: '10px' }}>V1 - Functional Org: Focused on impact</h3>
+            <p style={{ fontSize: '14px', color: colors.textSecondary, lineHeight: 1.6, marginBottom: '20px', maxWidth: '720px' }}>
+              To build an effective team, look across the partner types that will help Writer grow from a product differentiation perspective and from deployment & revenue. The entire ecosystem depends on global partner enablement—a clear partner program and partner marketing delivered in scalable ways.
             </p>
+            <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+              <div style={{
+                flex: '1 1 600px',
+                minWidth: 0,
+                padding: '20px',
+                borderRadius: '12px',
+                border: `2px dashed ${colors.purple}`,
+                backgroundColor: colors.pink ? colors.pink + '08' : 'rgba(245,196,216,0.08)'
+              }}>
+                <svg viewBox="0 0 920 300" style={{ width: '100%', height: 'auto', display: 'block' }} preserveAspectRatio="xMidYMid meet">
+                  <defs>
+                    <filter id="partnerNodeShadow" x="-10%" y="-10%" width="120%" height="120%">
+                      <feDropShadow dx="0" dy="1" stdDeviation="1" floodOpacity="0.15" />
+                    </filter>
+                  </defs>
+                  {/* Connector lines: root to L1, L1 to L2, L2 to L3 */}
+                  <g stroke={colors.gray300} strokeWidth="1.5" fill="none">
+                    <path d="M 460 52 v 18 M 460 70 H 110 V 88 M 460 70 H 460 V 88 M 460 70 H 720 V 88" />
+                    <path d="M 110 124 H 100 V 134 M 110 124 H 260 V 134" />
+                    <path d="M 100 134 V 166 M 100 166 H 70 V 180 M 100 166 H 210 V 180" />
+                    <path d="M 460 124 H 400 V 134 M 460 124 H 580 V 134" />
+                    <path d="M 400 134 V 180" />
+                    <path d="M 580 134 V 180" />
+                    <path d="M 720 124 H 630 V 134 M 720 124 H 765 V 134 M 720 124 H 884 V 134" />
+                  </g>
+                  {/* Root */}
+                  <rect x="330" y="8" width="260" height="44" rx="8" fill={colors.info} filter="url(#partnerNodeShadow)" />
+                  <text x="460" y="35" textAnchor="middle" fill="#fff" fontSize="13" fontWeight="600" fontFamily="Inter, sans-serif">Global Partnerships Writer Ecosystem</text>
+                  {/* L1 */}
+                  <rect x="40" y="88" width="140" height="36" rx="6" fill={colors.info} />
+                  <text x="110" y="110" textAnchor="middle" fill="#fff" fontSize="11" fontWeight="600" fontFamily="Inter, sans-serif">Service Providers</text>
+                  <rect x="380" y="88" width="160" height="36" rx="6" fill={colors.info} />
+                  <text x="460" y="110" textAnchor="middle" fill="#fff" fontSize="11" fontWeight="600" fontFamily="Inter, sans-serif">Technology Partnerships</text>
+                  <rect x="660" y="88" width="120" height="36" rx="6" fill={colors.info} />
+                  <text x="720" y="110" textAnchor="middle" fill="#fff" fontSize="11" fontWeight="600" fontFamily="Inter, sans-serif">Infrastructure</text>
+                  {/* L2 - Service */}
+                  <rect x="20" y="134" width="160" height="32" rx="6" fill={colors.info} />
+                  <text x="100" y="154" textAnchor="middle" fill="#fff" fontSize="10" fontWeight="500" fontFamily="Inter, sans-serif">G/SIs (Manage &amp; Operate)</text>
+                  <rect x="200" y="134" width="120" height="32" rx="6" fill={colors.info} />
+                  <text x="260" y="154" textAnchor="middle" fill="#fff" fontSize="10" fontWeight="500" fontFamily="Inter, sans-serif">G/SIs (Advisories)</text>
+                  {/* L3 - Service */}
+                  <rect x="10" y="180" width="120" height="28" rx="6" fill={colors.info} />
+                  <text x="70" y="198" textAnchor="middle" fill="#fff" fontSize="9" fontWeight="500" fontFamily="Inter, sans-serif">Niche SI / AI Natives</text>
+                  <rect x="140" y="180" width="140" height="28" rx="6" fill={colors.info} />
+                  <text x="210" y="198" textAnchor="middle" fill="#fff" fontSize="9" fontWeight="500" fontFamily="Inter, sans-serif">MSP / Outsourcers (BPO; Agencies)</text>
+                  {/* L2 - Tech */}
+                  <rect x="320" y="134" width="160" height="32" rx="6" fill={colors.info} />
+                  <text x="400" y="154" textAnchor="middle" fill="#fff" fontSize="10" fontWeight="500" fontFamily="Inter, sans-serif">Product Partners (Connectors)</text>
+                  <rect x="500" y="134" width="160" height="32" rx="6" fill={colors.info} />
+                  <text x="580" y="154" textAnchor="middle" fill="#fff" fontSize="10" fontWeight="500" fontFamily="Inter, sans-serif">Data Licensing &amp; Partnerships</text>
+                  {/* L3 - Tech */}
+                  <rect x="350" y="180" width="120" height="28" rx="6" fill={colors.info} />
+                  <text x="410" y="198" textAnchor="middle" fill="#fff" fontSize="9" fontWeight="500" fontFamily="Inter, sans-serif">Strategics (Embed/OEM)</text>
+                  <rect x="530" y="180" width="80" height="28" rx="6" fill={colors.info} />
+                  <text x="570" y="198" textAnchor="middle" fill="#fff" fontSize="9" fontWeight="500" fontFamily="Inter, sans-serif">Security</text>
+                  {/* L2 - Infrastructure */}
+                  <rect x="580" y="134" width="100" height="32" rx="6" fill={colors.info} />
+                  <text x="630" y="154" textAnchor="middle" fill="#fff" fontSize="10" fontWeight="500" fontFamily="Inter, sans-serif">Hyperscalers</text>
+                  <rect x="700" y="134" width="130" height="32" rx="6" fill={colors.info} />
+                  <text x="765" y="154" textAnchor="middle" fill="#fff" fontSize="10" fontWeight="500" fontFamily="Inter, sans-serif">Developer Platforms</text>
+                  <rect x="848" y="134" width="72" height="32" rx="6" fill={colors.info} />
+                  <text x="884" y="154" textAnchor="middle" fill="#fff" fontSize="9" fontWeight="500" fontFamily="Inter, sans-serif">Hardware (Future)</text>
+                </svg>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', flexShrink: 0, width: '200px' }}>
+                {[
+                  { label: 'Partner Enablement', highlight: false },
+                  { label: 'Partner Program + Incentives', highlight: false },
+                  { label: 'Partner Tools (Portal, LMS, SFDC)', highlight: false },
+                  { label: 'Partner Marketing', highlight: true },
+                  { label: 'Partner Sales', highlight: true, dashed: true }
+                ].map((item, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      padding: '12px 14px',
+                      borderRadius: '8px',
+                      border: item.dashed ? `2px dashed ${colors.border}` : `1px solid ${colors.border}`,
+                      backgroundColor: item.highlight ? (colors.pink ? colors.pink + '18' : 'rgba(245,196,216,0.12)') : colors.surface,
+                      fontSize: '13px',
+                      fontWeight: '500',
+                      color: colors.text
+                    }}
+                  >
+                    {item.label}
+                  </div>
+                ))}
+              </div>
+            </div>
           </Card>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
-            <Card style={{ borderTop: `3px solid ${colors.success}` }}>
-              <h4 style={{ fontSize: '14px', fontWeight: '600', color: colors.text, marginBottom: '12px' }}>Best Practices</h4>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {salesPartnership.bestPractices.map((item, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-                    <div style={{ 
-                      width: '5px', 
-                      height: '5px', 
-                      borderRadius: '50%', 
-                      backgroundColor: colors.success,
-                      marginTop: '6px',
-                      flexShrink: 0
-                    }} />
-                    <EditableText
-                      value={item}
-                      onChange={(v) => {
-                        const newItems = [...salesPartnership.bestPractices];
-                        newItems[i] = v;
-                        setSalesPartnership({ ...salesPartnership, bestPractices: newItems });
-                      }}
-                      style={{ fontSize: '13px', color: colors.textSecondary, flex: 1 }}
-                    />
-                    {isEditMode && (
-                      <button
-                        onClick={() => {
-                          const newItems = salesPartnership.bestPractices.filter((_, idx) => idx !== i);
-                          setSalesPartnership({ ...salesPartnership, bestPractices: newItems });
-                        }}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          color: colors.danger,
-                          cursor: 'pointer',
-                          padding: '0 4px',
-                          fontSize: '16px',
-                          opacity: 0.6,
-                          transition: 'opacity 0.2s'
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
-                        onMouseLeave={(e) => e.currentTarget.style.opacity = '0.6'}
-                      >
-                        ×
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-              {isEditMode && (
-                <button
-                  onClick={() => {
-                    setSalesPartnership({ ...salesPartnership, bestPractices: [...salesPartnership.bestPractices, 'New item - click to edit'] });
-                  }}
-                  style={{
-                    marginTop: '8px',
-                    padding: '8px 12px',
-                    border: `1px dashed ${colors.success}`,
-                    borderRadius: '8px',
-                    backgroundColor: 'transparent',
-                    color: colors.success,
-                    fontSize: '12px',
-                    fontWeight: '500',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = colors.success + '10';
-                    e.currentTarget.style.borderStyle = 'solid';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = 'transparent';
-                    e.currentTarget.style.borderStyle = 'dashed';
-                  }}
-                >
-                  + Add item
-                </button>
-              )}
+          <h3 style={{ fontSize: '20px', fontWeight: '600', color: colors.text, marginBottom: '20px' }}>Partner SA Rules of Engagement</h3>
+
+          <Card style={{ marginBottom: '20px', backgroundColor: colors.info + '10', borderLeft: `4px solid ${colors.info}` }}>
+            <h4 style={{ fontSize: '14px', fontWeight: '600', color: colors.textMuted, marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Core Mission</h4>
+            <EditableText value={partnerSARules.coreMission} onChange={(v) => updatePartnerSARules('coreMission', v)} style={{ fontSize: '15px', color: colors.textSecondary, lineHeight: 1.6 }} multiline />
+          </Card>
+
+          <Card style={{ marginBottom: '20px' }}>
+            <h4 style={{ fontSize: '14px', fontWeight: '600', color: colors.text, marginBottom: '10px' }}>Four Strategic Pillars</h4>
+            <EditableText value={partnerSARules.fourPillars} onChange={(v) => updatePartnerSARules('fourPillars', v)} style={{ fontSize: '14px', color: colors.textSecondary, lineHeight: 1.6 }} multiline />
+          </Card>
+
+          <Card style={{ marginBottom: '20px' }}>
+            <h4 style={{ fontSize: '14px', fontWeight: '600', color: colors.text, marginBottom: '10px' }}>Partner Ecosystem Structure</h4>
+            <EditableText value={partnerSARules.ecosystemStructure} onChange={(v) => updatePartnerSARules('ecosystemStructure', v)} style={{ fontSize: '14px', color: colors.textSecondary, lineHeight: 1.6 }} multiline />
+          </Card>
+
+          <h4 style={{ fontSize: '16px', fontWeight: '600', color: colors.text, marginBottom: '12px' }}>Three-Tier Partner Classification</h4>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '24px' }}>
+            <Card style={{ borderTop: `4px solid ${colors.accent}` }}>
+              <h5 style={{ fontSize: '13px', fontWeight: '600', color: colors.accent, marginBottom: '10px' }}>Tier 1 (Strategic)</h5>
+              {(partnerSARules.tier1 || []).map((item, i) => (
+                <EditableListItem key={i} value={item} onChange={(v) => updatePartnerSARulesList('tier1', i, v)} onDelete={() => deletePartnerSARulesListItem('tier1', i)} color={colors.accent} />
+              ))}
+              <AddItemButton onClick={() => addPartnerSARulesListItem('tier1')} label="Add" />
             </Card>
-            <Card style={{ borderTop: `3px solid ${colors.danger}` }}>
-              <h4 style={{ fontSize: '14px', fontWeight: '600', color: colors.text, marginBottom: '12px' }}>Current Gaps</h4>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {salesPartnership.currentGaps.map((item, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-                    <div style={{ 
-                      width: '5px', 
-                      height: '5px', 
-                      borderRadius: '50%', 
-                      backgroundColor: colors.danger,
-                      marginTop: '6px',
-                      flexShrink: 0
-                    }} />
-                    <EditableText
-                      value={item}
-                      onChange={(v) => {
-                        const newItems = [...salesPartnership.currentGaps];
-                        newItems[i] = v;
-                        setSalesPartnership({ ...salesPartnership, currentGaps: newItems });
-                      }}
-                      style={{ fontSize: '13px', color: colors.textSecondary, flex: 1 }}
-                    />
-                    {isEditMode && (
-                      <button
-                        onClick={() => {
-                          const newItems = salesPartnership.currentGaps.filter((_, idx) => idx !== i);
-                          setSalesPartnership({ ...salesPartnership, currentGaps: newItems });
-                        }}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          color: colors.danger,
-                          cursor: 'pointer',
-                          padding: '0 4px',
-                          fontSize: '16px',
-                          opacity: 0.6,
-                          transition: 'opacity 0.2s'
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
-                        onMouseLeave={(e) => e.currentTarget.style.opacity = '0.6'}
-                      >
-                        ×
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-              {isEditMode && (
-                <button
-                  onClick={() => {
-                    setSalesPartnership({ ...salesPartnership, currentGaps: [...salesPartnership.currentGaps, 'New item - click to edit'] });
-                  }}
-                  style={{
-                    marginTop: '8px',
-                    padding: '8px 12px',
-                    border: `1px dashed ${colors.danger}`,
-                    borderRadius: '8px',
-                    backgroundColor: 'transparent',
-                    color: colors.danger,
-                    fontSize: '12px',
-                    fontWeight: '500',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = colors.danger + '10';
-                    e.currentTarget.style.borderStyle = 'solid';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = 'transparent';
-                    e.currentTarget.style.borderStyle = 'dashed';
-                  }}
-                >
-                  + Add item
-                </button>
-              )}
+            <Card style={{ borderTop: `4px solid ${colors.success}` }}>
+              <h5 style={{ fontSize: '13px', fontWeight: '600', color: colors.success, marginBottom: '10px' }}>Tier 2 (Qualified)</h5>
+              {(partnerSARules.tier2 || []).map((item, i) => (
+                <EditableListItem key={i} value={item} onChange={(v) => updatePartnerSARulesList('tier2', i, v)} onDelete={() => deletePartnerSARulesListItem('tier2', i)} color={colors.success} />
+              ))}
+              <AddItemButton onClick={() => addPartnerSARulesListItem('tier2')} label="Add" />
+            </Card>
+            <Card style={{ borderTop: `4px solid ${colors.warning}` }}>
+              <h5 style={{ fontSize: '13px', fontWeight: '600', color: colors.warning, marginBottom: '10px' }}>Tier 3 (Evaluation)</h5>
+              {(partnerSARules.tier3 || []).map((item, i) => (
+                <EditableListItem key={i} value={item} onChange={(v) => updatePartnerSARulesList('tier3', i, v)} onDelete={() => deletePartnerSARulesListItem('tier3', i)} color={colors.warning} />
+              ))}
+              <AddItemButton onClick={() => addPartnerSARulesListItem('tier3')} label="Add" />
             </Card>
           </div>
 
-          <Card>
-            <h4 style={{ fontSize: '14px', fontWeight: '600', color: colors.text, marginBottom: '12px' }}>Product Partnership</h4>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {productPartnership.map((item, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-                  <div style={{ 
-                    width: '5px', 
-                    height: '5px', 
-                    borderRadius: '50%', 
-                    backgroundColor: colors.info,
-                    marginTop: '6px',
-                    flexShrink: 0
-                  }} />
-                  <EditableText
-                    value={item}
-                    onChange={(v) => {
-                      const newItems = [...productPartnership];
-                      newItems[i] = v;
-                      setProductPartnership(newItems);
-                    }}
-                    style={{ fontSize: '13px', color: colors.textSecondary, flex: 1 }}
-                  />
-                  {isEditMode && (
-                    <button
-                      onClick={() => setProductPartnership(productPartnership.filter((_, idx) => idx !== i))}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: colors.danger,
-                        cursor: 'pointer',
-                        padding: '0 4px',
-                        fontSize: '16px',
-                        opacity: 0.6,
-                        transition: 'opacity 0.2s'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
-                      onMouseLeave={(e) => e.currentTarget.style.opacity = '0.6'}
-                    >
-                      ×
-                    </button>
-                  )}
-                </div>
+          <h4 style={{ fontSize: '16px', fontWeight: '600', color: colors.text, marginBottom: '12px' }}>Deliverable Categories</h4>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
+            <Card>
+              <h5 style={{ fontSize: '13px', fontWeight: '600', color: colors.text, marginBottom: '10px' }}>Incubation</h5>
+              {(partnerSARules.incubationDeliverables || []).map((item, i) => (
+                <EditableListItem key={i} value={item} onChange={(v) => updatePartnerSARulesList('incubationDeliverables', i, v)} onDelete={() => deletePartnerSARulesListItem('incubationDeliverables', i)} color={colors.info} />
               ))}
-            </div>
-            {isEditMode && (
-              <button
-                onClick={() => setProductPartnership([...productPartnership, 'New item - click to edit'])}
-                style={{
-                  marginTop: '8px',
-                  padding: '8px 12px',
-                  border: `1px dashed ${colors.info}`,
-                  borderRadius: '8px',
-                  backgroundColor: 'transparent',
-                  color: colors.info,
-                  fontSize: '12px',
-                  fontWeight: '500',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = colors.info + '10';
-                  e.currentTarget.style.borderStyle = 'solid';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                  e.currentTarget.style.borderStyle = 'dashed';
-                }}
-              >
-                + Add item
-              </button>
-            )}
+              <AddItemButton onClick={() => addPartnerSARulesListItem('incubationDeliverables')} label="Add" />
+            </Card>
+            <Card>
+              <h5 style={{ fontSize: '13px', fontWeight: '600', color: colors.text, marginBottom: '10px' }}>Co-sell</h5>
+              {(partnerSARules.cosellDeliverables || []).map((item, i) => (
+                <EditableListItem key={i} value={item} onChange={(v) => updatePartnerSARulesList('cosellDeliverables', i, v)} onDelete={() => deletePartnerSARulesListItem('cosellDeliverables', i)} color={colors.info} />
+              ))}
+              <AddItemButton onClick={() => addPartnerSARulesListItem('cosellDeliverables')} label="Add" />
+            </Card>
+            <Card>
+              <h5 style={{ fontSize: '13px', fontWeight: '600', color: colors.text, marginBottom: '10px' }}>Hyperscaler-specific</h5>
+              {(partnerSARules.hyperscalerDeliverables || []).map((item, i) => (
+                <EditableListItem key={i} value={item} onChange={(v) => updatePartnerSARulesList('hyperscalerDeliverables', i, v)} onDelete={() => deletePartnerSARulesListItem('hyperscalerDeliverables', i)} color={colors.info} />
+              ))}
+              <AddItemButton onClick={() => addPartnerSARulesListItem('hyperscalerDeliverables')} label="Add" />
+            </Card>
+            <Card>
+              <h5 style={{ fontSize: '13px', fontWeight: '600', color: colors.text, marginBottom: '10px' }}>Tech partnership</h5>
+              {(partnerSARules.techPartnershipDeliverables || []).map((item, i) => (
+                <EditableListItem key={i} value={item} onChange={(v) => updatePartnerSARulesList('techPartnershipDeliverables', i, v)} onDelete={() => deletePartnerSARulesListItem('techPartnershipDeliverables', i)} color={colors.info} />
+              ))}
+              <AddItemButton onClick={() => addPartnerSARulesListItem('techPartnershipDeliverables')} label="Add" />
+            </Card>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
+            <Card style={{ borderLeft: `4px solid ${colors.success}` }}>
+              <h5 style={{ fontSize: '14px', fontWeight: '600', color: colors.success, marginBottom: '10px' }}>Partner SA Owns</h5>
+              {(partnerSARules.partnerSAOwns || []).map((item, i) => (
+                <EditableListItem key={i} value={item} onChange={(v) => updatePartnerSARulesList('partnerSAOwns', i, v)} onDelete={() => deletePartnerSARulesListItem('partnerSAOwns', i)} color={colors.success} />
+              ))}
+              <AddItemButton onClick={() => addPartnerSARulesListItem('partnerSAOwns')} label="Add" />
+            </Card>
+            <Card style={{ borderLeft: `4px solid ${colors.accent}` }}>
+              <h5 style={{ fontSize: '14px', fontWeight: '600', color: colors.accent, marginBottom: '10px' }}>Partner Managers Own</h5>
+              {(partnerSARules.partnerManagersOwn || []).map((item, i) => (
+                <EditableListItem key={i} value={item} onChange={(v) => updatePartnerSARulesList('partnerManagersOwn', i, v)} onDelete={() => deletePartnerSARulesListItem('partnerManagersOwn', i)} color={colors.accent} />
+              ))}
+              <AddItemButton onClick={() => addPartnerSARulesListItem('partnerManagersOwn')} label="Add" />
+            </Card>
+          </div>
+
+          <Card style={{ marginBottom: '20px', borderLeft: `4px solid ${colors.warning}` }}>
+            <h5 style={{ fontSize: '14px', fontWeight: '600', color: colors.warning, marginBottom: '10px' }}>Current Constraints</h5>
+            {(partnerSARules.currentConstraints || []).map((item, i) => (
+              <EditableListItem key={i} value={item} onChange={(v) => updatePartnerSARulesList('currentConstraints', i, v)} onDelete={() => deletePartnerSARulesListItem('currentConstraints', i)} color={colors.warning} />
+            ))}
+            <AddItemButton onClick={() => addPartnerSARulesListItem('currentConstraints')} label="Add" />
+          </Card>
+
+          <Card style={{ borderLeft: `4px solid ${colors.danger}` }}>
+            <h5 style={{ fontSize: '14px', fontWeight: '600', color: colors.danger, marginBottom: '10px' }}>Guard Rails—What SA Won&apos;t Support</h5>
+            {(partnerSARules.guardRails || []).map((item, i) => (
+              <EditableListItem key={i} value={item} onChange={(v) => updatePartnerSARulesList('guardRails', i, v)} onDelete={() => deletePartnerSARulesListItem('guardRails', i)} color={colors.danger} />
+            ))}
+            <AddItemButton onClick={() => addPartnerSARulesListItem('guardRails')} label="Add" />
           </Card>
         </div>
       )}
@@ -1992,6 +2202,9 @@ const splitPhaseTitle = (title) => {
   return [title, ''];
 };
 
+// Exponential growth curve: flat at start, steep at end (0 → 100 over 30 days)
+const valueAtDay = (day) => 100 * (Math.exp(3 * day / 30) - 1) / (Math.exp(3) - 1);
+
 const InteractiveTimeline = ({ phases, activePhase, setActivePhase }) => {
   const svgRef = useRef(null);
   const containerRef = useRef(null);
@@ -2020,61 +2233,122 @@ const InteractiveTimeline = ({ phases, activePhase, setActivePhase }) => {
 
     const isSmallScreen = dimensions.width < 768;
     const margin = {
-      top: isSmallScreen ? 170 : 180,
-      right: isSmallScreen ? 40 : 80,
-      bottom: isSmallScreen ? 170 : 180,
-      left: isSmallScreen ? 40 : 80
+      top: 24,
+      right: isSmallScreen ? 24 : 40,
+      bottom: isSmallScreen ? 120 : 100,
+      left: isSmallScreen ? 44 : 52
     };
     const width = dimensions.width - margin.left - margin.right;
     const height = dimensions.height - margin.top - margin.bottom;
-    const trackY = height / 2;
-    const progressWidth = ((activePhase + 1) / phases.length) * width;
 
     const g = svg.append('g').attr('transform', `translate(${margin.left}, ${margin.top})`);
     const xScale = scaleLinear().domain([0, 30]).range([0, width]);
+    const yScale = scaleLinear().domain([0, 100]).range([height, 0]);
 
-    // Draw timeline track
-    g.append('line')
-      .attr('x1', 0).attr('y1', trackY).attr('x2', width).attr('y2', trackY)
+    // Curve data: exponential value over days 0–30
+    const curveData = [];
+    for (let d = 0; d <= 30; d += 0.5) {
+      curveData.push({ day: d, value: valueAtDay(d) });
+    }
+
+    const lineGen = line()
+      .x(d => xScale(d.day))
+      .y(d => yScale(d.value))
+      .curve(curveMonotoneX);
+
+    // Y-axis: value key as 1x, 2x, 3x, etc. (no numeric count)
+    const yTickValues = [20, 40, 60, 80, 100];
+    const yAxis = axisLeft(yScale)
+      .tickValues(yTickValues)
+      .tickFormat((_, i) => `${i + 1}x`)
+      .tickSizeInner(-width)
+      .tickSizeOuter(0);
+    g.append('g')
+      .attr('class', 'axis axis-y')
+      .call(yAxis)
+      .selectAll('.tick line')
       .attr('stroke', colors.borderLight)
-      .attr('stroke-width', 4)
-      .attr('stroke-linecap', 'round');
+      .attr('stroke-opacity', 0.5);
+    g.select('.axis-y').selectAll('text').attr('fill', colors.textMuted).attr('font-size', '11px');
+    g.append('text')
+      .attr('transform', 'rotate(-90)')
+      .attr('x', -height / 2)
+      .attr('y', -margin.left + 16)
+      .attr('text-anchor', 'middle')
+      .attr('fill', colors.textMuted)
+      .attr('font-size', '11px')
+      .attr('font-weight', '600')
+      .text('Value');
 
-    // Draw progress line
-    g.append('line')
-      .attr('x1', 0).attr('y1', trackY).attr('x2', progressWidth).attr('y2', trackY)
-      .attr('stroke', phases[activePhase].color)
-      .attr('stroke-width', 4)
-      .attr('stroke-linecap', 'round')
-      .style('filter', 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))');
+    // X-axis (Days)
+    const xAxis = axisBottom(xScale)
+      .ticks(7)
+      .tickValues([0, 5, 10, 15, 20, 25, 30])
+      .tickSizeInner(-height)
+      .tickSizeOuter(0);
+    g.append('g')
+      .attr('class', 'axis axis-x')
+      .attr('transform', `translate(0, ${height})`)
+      .call(xAxis)
+      .selectAll('.tick line')
+      .attr('stroke', colors.borderLight)
+      .attr('stroke-opacity', 0.5);
+    g.select('.axis-x').selectAll('text').attr('fill', colors.textMuted).attr('font-size', '11px');
+    g.append('text')
+      .attr('x', width / 2)
+      .attr('y', height + margin.bottom - 12)
+      .attr('text-anchor', 'middle')
+      .attr('fill', colors.textMuted)
+      .attr('font-size', '11px')
+      .attr('font-weight', '600')
+      .text('Days');
 
-    // Milestone markers (before phase labels so labels render on top)
-    [0, 10, 20, 30].forEach(day => {
-      const x = xScale(day);
-      g.append('line')
-        .attr('x1', x).attr('y1', trackY - 8).attr('x2', x).attr('y2', trackY + 8)
-        .attr('stroke', colors.border).attr('stroke-width', 1).attr('opacity', 0.3);
-    });
-
-    // Draw phase nodes
-    phases.forEach((phase, i) => {
-      let x = i === 0 ? 0 : i === phases.length - 1 ? width : (i / (phases.length - 1)) * width;
+    // Draw curve in three segments (one per phase) with phase colors
+    const segmentRanges = [
+      [0, 10],
+      [10, 20],
+      [20, 30]
+    ];
+    segmentRanges.forEach(([start, end], i) => {
+      const segmentData = curveData.filter(d => d.day >= start && d.day <= end);
+      if (segmentData.length === 0) return;
+      const phase = phases[i];
       const isActive = i === activePhase;
       const isPast = i < activePhase;
-      const isTop = i % 2 === 0;
+      g.append('path')
+        .attr('d', lineGen(segmentData))
+        .attr('fill', 'none')
+        .attr('stroke', phase.color)
+        .attr('stroke-width', isActive ? 4 : isPast ? 3 : 2)
+        .attr('stroke-linecap', 'round')
+        .attr('stroke-linejoin', 'round')
+        .attr('opacity', isActive ? 1 : isPast ? 0.85 : 0.5)
+        .style('cursor', 'pointer')
+        .style('filter', isActive ? 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))' : 'none')
+        .on('click', () => setActivePhase(i));
+    });
+
+    // Phase nodes on the curve (mid-phase: 5, 15, 25)
+    const nodeDays = [5, 15, 25];
+    phases.forEach((phase, i) => {
+      const day = nodeDays[i];
+      const x = xScale(day);
+      const y = yScale(valueAtDay(day));
+      const isActive = i === activePhase;
+      const isPast = i < activePhase;
       const circleRadius = isActive ? 16 : isPast ? 14 : 12;
-      const labelY = isTop ? trackY - circleRadius - 70 : trackY + circleRadius + 75;
-      const titleY = isTop ? trackY - circleRadius - 48 : trackY + circleRadius + 98;
-      let textAnchor = i === 0 ? 'start' : i === phases.length - 1 ? 'end' : 'middle';
+      const labelY = y - circleRadius - 44;
+      const titleY = y - circleRadius - 24;
+      const textAnchor = i === 0 ? 'start' : i === phases.length - 1 ? 'end' : 'middle';
 
       if (isActive || isPast) {
         g.append('circle')
-          .attr('cx', x).attr('cy', trackY).attr('r', 20)
+          .attr('cx', x).attr('cy', y).attr('r', 20)
           .attr('fill', 'none').attr('stroke', phase.color).attr('stroke-width', 2).attr('opacity', 0.3)
           .style('filter', 'blur(4px)');
       }
       g.append('circle')
-        .attr('cx', x).attr('cy', trackY)
+        .attr('cx', x).attr('cy', y)
         .attr('r', circleRadius)
         .attr('fill', isActive || isPast ? phase.color : 'white')
         .attr('stroke', phase.color)
@@ -2090,7 +2364,7 @@ const InteractiveTimeline = ({ phases, activePhase, setActivePhase }) => {
         });
       if (isActive || isPast) {
         g.append('circle')
-          .attr('cx', x).attr('cy', trackY).attr('r', 6).attr('fill', 'white')
+          .attr('cx', x).attr('cy', y).attr('r', 6).attr('fill', 'white')
           .style('pointer-events', 'none');
       }
 
@@ -2127,7 +2401,7 @@ const InteractiveTimeline = ({ phases, activePhase, setActivePhase }) => {
       if (isPast) {
         g.append('text')
           .attr('x', x)
-          .attr('y', labelY - 20)
+          .attr('y', labelY - 18)
           .attr('text-anchor', checkmarkAnchor)
           .attr('font-size', '18px')
           .text('✓')
@@ -2156,13 +2430,14 @@ const First30DaysSection = () => {
       days: 'Days 1-10',
       title: 'Discovery & Baseline',
       color: colors.accent,
-      goal: 'Map current state across Partner SA integration, partner accountability, competitive positioning, capacity, and retention—establish baseline for action',
+      goal: 'Map current state across team structure, key activities of value, competitive positioning, capacity, and retention—establish baseline for action',
       priorities: [
         'Partner SA: Audit all partner-sourced deals; interview 3-5 regional SAs on friction points; document "telephone game" workflow; pull partner vs. direct deal velocity data',
         'Partner Accountability: Create Partner Engagement Scorecard—joint customers identified, discovery calls scheduled, pipeline generated, deals closed; define Tier 1/2/3 expectations (e.g. Tier 1: 2 joint intros/month, quarterly pipeline target)',
         'Differentiation: Conduct 5 lost-deal interviews (where "just use ChatGPT" killed deals); audit sales collateral for differentiation gaps; build competitive matrix: Writer vs. ChatGPT Enterprise vs. Claude vs. Gemini (governance, brand voice, integrations, workflow depth)',
         'Capacity: Build SA Capacity Dashboard—deal count per SA, weighted pipeline, deal stage distribution, time-to-close; set yellow (18+ deals or 120% avg pipeline) and red (21+ or 140%) thresholds',
-        'Retention: Confidential 1:1s with each West Coast SA—what would make you stay 2 years? What energizes vs. drains? Identify flight risk levels; map career aspirations to growth opportunities'
+        'Retention: Confidential 1:1s with each West Coast SA—what would make you stay 2 years? What energizes vs. drains? Identify flight risk levels; map career aspirations to growth opportunities',
+        'General SA: Shadow or interview top-performing SAs to identify which activities drive wins (discovery, demos, follow-up); review win/loss and deal-velocity data; document 3–5 repeatable patterns and draft "how the best SAs work" for playbook'
       ],
       risks: [
         'Trying to fix everything at once without baseline clarity',
@@ -2181,20 +2456,22 @@ const First30DaysSection = () => {
         'Partner Engagement Scorecard and tier definitions',
         'Competitive matrix and lost-deal summary',
         'SA Capacity Dashboard (yellow/red thresholds)',
-        'Retention 1:1 summary and flight-risk map'
+        'Retention 1:1 summary and flight-risk map',
+        'General SA: Key activities of value summary; 3–5 repeatable patterns documented'
       ]
     },
     {
       days: 'Days 11-20',
       title: 'Pilot Design & Build',
       color: colors.purple,
-      goal: 'Design West Coast Partner SA pilot, prescriptive partner assets, differentiation playbook, capacity rules, and retention programs—actionable by Day 30',
+      goal: 'Design pilots and prescriptive assets (partner and general SA), differentiation playbook, capacity rules, and retention programs—actionable by Day 30',
       priorities: [
         'Partner SA: Select West Coast for 60-day integration pilot; redefine Partner SA as "Partner Specialist" overlay in regional pod; create shared Slack/deal rooms (partner + regional SAs); document RACI—Partner Specialist owns partner relationship, Regional SA owns technical solution and customer relationship',
         'Partner Accountability: Build Partner Pitch Kits for top 5 use cases (FS: KYC, research, regulatory docs; Healthcare: clinical docs, prior auth; Manufacturing: tech docs, quality reporting)—each with 2-min pitch, proof points, discovery questions, demo script; create "Why Writer vs. DIY" one-pager for partner sellers',
         'Differentiation: Develop Objection Handling Playbook—talk tracks for "just use ChatGPT," "we\'ll build ourselves," "Gemini free with Workspace"; create 3 vertical "Why Writer Wins" narratives (FS, Technology, Healthcare); document TCO/time-to-value angles',
         'Capacity: Audit SA-to-AE mappings vs. actual deal flow; identify mismatches (high-volume AEs + loaded SAs); propose rebalancing by geography, vertical, deal velocity; draft Deal Assignment Rules of Engagement and escalation path when capacity constrained',
-        'Retention: Define Lighthouse Deal program—2-3 strategic accounts/quarter with executive touchpoints; design SA Innovation Sprint (2-day net-new build, present to leadership); implement Executive Shadow (top performers in 2-3 exec customer meetings/quarter)'
+        'Retention: Define Lighthouse Deal program—2-3 strategic accounts/quarter with executive touchpoints; design SA Innovation Sprint (2-day net-new build, present to leadership); implement Executive Shadow (top performers in 2-3 exec customer meetings/quarter)',
+        'General SA: Turn key activities into templates or playbooks (discovery, demo, exit gates, handoffs); define replication cadence (enablement, coaching, content); pilot with 1–2 SAs and iterate'
       ],
       risks: [
         'Pilot design too heavy—can\'t launch in 60 days',
@@ -2213,20 +2490,22 @@ const First30DaysSection = () => {
         'Partner Pitch Kits (top 5 use cases) and Why Writer vs. DIY one-pager',
         'Objection Handling Playbook and vertical narratives',
         'Deal Assignment Rules of Engagement and rebalancing proposal',
-        'Lighthouse Deal and Innovation Sprint program docs'
+        'Lighthouse Deal and Innovation Sprint program docs',
+        'General SA: SA playbook draft (key activities); replication process outline and pilot plan'
       ]
     },
     {
       days: 'Days 21-30',
       title: 'Operationalize & Rhythm',
       color: colors.warning,
-      goal: 'Launch pilot and accountability rhythms, enable SAs on differentiation, operationalize capacity and recognition—so Day 30 outcomes are measurable and repeatable',
+      goal: 'Launch pilots and accountability rhythms, enable SAs on differentiation and replication process, operationalize capacity and recognition—so Day 30 outcomes are measurable and repeatable',
       priorities: [
         'Partner SA: Launch West Coast pilot with success metrics (deal velocity, customer satisfaction, SA utilization); run weekly retro; build business case for broader rollout from pilot data',
         'Partner Accountability: Launch monthly Partner Business Reviews with scorecard; require Joint Account Planning for Tier 1 (named accounts, owner, next action, commit date); define escalation path—2 consecutive months below minimums triggers exec-to-exec conversation; build Salesforce dashboard for partner engagement visible to leadership',
         'Differentiation: Run 90-minute SA enablement on Objection Handling Playbook; start "Win Story of the Week" in Slack; create Seismic/Highspot collection for competitive situations; establish quarterly competitive intel refresh',
         'Capacity: Add weekly 15-min capacity check-in to team standup (dashboard review, flag imbalances); document flex-capacity protocol when SA hits red threshold (redistribution steps, AE communication); define strategic-deal criteria and how it affects capacity calculation',
-        'Retention: Launch monthly Impact Spotlight (SA presents innovative solution to team + leadership); document path-to-Lead (deals closed, enablement contribution, peer feedback, lighthouse participation); schedule quarterly career development conversations (separate from performance reviews)'
+        'Retention: Launch monthly Impact Spotlight (SA presents innovative solution to team + leadership); document path-to-Lead (deals closed, enablement contribution, peer feedback, lighthouse participation); schedule quarterly career development conversations (separate from performance reviews)',
+        'General SA: Roll out playbook and replication cadence (enablement, coaching checkpoints, content); build feedback loop so wins and gaps continuously update the process; establish "key activities of value" as a standing team topic'
       ],
       risks: [
         'Pilot metrics not tracked—can\'t prove value',
@@ -2245,12 +2524,27 @@ const First30DaysSection = () => {
         'Partner Business Review and Joint Account Planning in motion; partner dashboard live',
         'SA differentiation enablement complete; competitive content in Seismic/Highspot',
         'Weekly capacity check-in and flex-capacity protocol documented',
-        'Impact Spotlight and path-to-Lead doc live; career conversations scheduled'
+        'Impact Spotlight and path-to-Lead doc live; career conversations scheduled',
+        'General SA: Playbook in use; replication cadence and feedback loop established'
       ]
     }
   ];
 
   const [phases, setPhases] = useLocalStorage('leadershipPlaybook_phases', defaultPhases30);
+
+  // One-time migration: if saved phases still have old partner-SA-specific goals, update to generic goals
+  useEffect(() => {
+    setPhases(prev => {
+      if (!Array.isArray(prev) || prev.length < 3) return prev;
+      if (!prev[0]?.goal?.includes('Partner SA integration')) return prev;
+      const newGoals = [
+        'Map current state across team structure, key activities of value, competitive positioning, capacity, and retention—establish baseline for action',
+        'Design pilots and prescriptive assets (partner and general SA), differentiation playbook, capacity rules, and retention programs—actionable by Day 30',
+        'Launch pilots and accountability rhythms, enable SAs on differentiation and replication process, operationalize capacity and recognition—so Day 30 outcomes are measurable and repeatable'
+      ];
+      return prev.map((p, i) => ({ ...p, goal: newGoals[i] ?? p.goal }));
+    });
+  }, []);
 
   const [keyOutcomesTitle, setKeyOutcomesTitle] = useLocalStorage('leadershipPlaybook_keyOutcomesTitle', 'What I Aim to Have in Place After 30 Days');
   const [keyOutcomes, setKeyOutcomes] = useLocalStorage('leadershipPlaybook_keyOutcomes', [
@@ -2258,7 +2552,24 @@ const First30DaysSection = () => {
     'Partner Accountability: Scorecard and monthly Partner Business Reviews; Tier 1 joint account plans in place',
     'Differentiation: Objection Handling Playbook enabled; Win Story of the Week and competitive content live',
     'Capacity: SA Capacity Dashboard with yellow/red thresholds; weekly check-in and flex-capacity protocol',
-    'Retention: Lighthouse Deal program and Impact Spotlight launched; path-to-Lead and career conversations scheduled'
+    'Retention: Lighthouse Deal program and Impact Spotlight launched; path-to-Lead and career conversations scheduled',
+    'General SA: Key activities of value identified and documented; process to replicate in place (playbook, enablement, cadence)'
+  ]);
+
+  const [generalSADescription, setGeneralSADescription] = useLocalStorage('leadershipPlaybook_generalSADescription',
+    'Alongside Partner SA work, the first 30 days should establish a baseline for all SAs: identify which activities drive the most value (wins, velocity, customer outcomes) and create repeatable process so the team can scale what works instead of relying on hero effort.'
+  );
+  const [generalSAIdentifying, setGeneralSAIdentifying] = useLocalStorage('leadershipPlaybook_generalSAIdentifying', [
+    'Shadow or interview top performers to pinpoint what they do that drives wins (discovery, demos, follow-up, handoffs)',
+    'Review win/loss and deal-velocity data to tie activities to outcomes',
+    'Document 3–5 repeatable patterns (e.g. discovery questions that unlock expansion, demo flows that convert)',
+    'Capture "how the best SAs work" in a draft that can become a playbook'
+  ]);
+  const [generalSAReplication, setGeneralSAReplication] = useLocalStorage('leadershipPlaybook_generalSAReplication', [
+    'Turn key activities into templates or playbooks (discovery, demo, exit gates, handoffs)',
+    'Define a replication cadence: enablement sessions, coaching checkpoints, content in Seismic/Highspot',
+    'Pilot with 1–2 SAs and iterate before rolling out to the full team',
+    'Build feedback loop so wins and gaps continuously update the process'
   ]);
 
   // Update functions for phase data
@@ -2349,10 +2660,10 @@ const First30DaysSection = () => {
 
         <div style={{ marginBottom: '24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-            <div style={{ 
-              width: '20px', 
-              height: '20px', 
-              borderRadius: '4px', 
+            <div style={{
+              width: '20px',
+              height: '20px',
+              borderRadius: '4px',
               backgroundColor: phases[activePhase].color + '20',
               display: 'flex',
               alignItems: 'center',
@@ -2371,7 +2682,7 @@ const First30DaysSection = () => {
                 onChange={(v) => updatePhaseListItem('priorities', i, v)}
                 onDelete={() => deletePhaseListItem('priorities', i)}
                 color={phases[activePhase].color}
-                style={{ 
+                style={{
                   padding: '8px',
                   backgroundColor: i % 2 === 0 ? colors.surface : 'white',
                   borderRadius: '6px'
@@ -2379,24 +2690,24 @@ const First30DaysSection = () => {
               />
             ))}
           </div>
-          <AddItemButton 
-            onClick={() => addPhaseListItem('priorities')} 
-            label="Add priority" 
+          <AddItemButton
+            onClick={() => addPhaseListItem('priorities')}
+            label="Add priority"
           />
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
-          <div style={{ 
+          <div style={{
             padding: '16px',
             backgroundColor: colors.danger + '08',
             borderRadius: '8px',
             border: `1px solid ${colors.danger}20`
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-              <div style={{ 
-                width: '20px', 
-                height: '20px', 
-                borderRadius: '4px', 
+              <div style={{
+                width: '20px',
+                height: '20px',
+                borderRadius: '4px',
                 backgroundColor: colors.danger + '20',
                 display: 'flex',
                 alignItems: 'center',
@@ -2418,22 +2729,22 @@ const First30DaysSection = () => {
                 />
               ))}
             </div>
-            <AddItemButton 
-              onClick={() => addPhaseListItem('risks')} 
-              label="Add risk" 
+            <AddItemButton
+              onClick={() => addPhaseListItem('risks')}
+              label="Add risk"
             />
           </div>
-          <div style={{ 
+          <div style={{
             padding: '16px',
             backgroundColor: colors.warning + '08',
             borderRadius: '8px',
             border: `1px solid ${colors.warning}20`
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-              <div style={{ 
-                width: '20px', 
-                height: '20px', 
-                borderRadius: '4px', 
+              <div style={{
+                width: '20px',
+                height: '20px',
+                borderRadius: '4px',
                 backgroundColor: colors.warning + '20',
                 display: 'flex',
                 alignItems: 'center',
@@ -2455,9 +2766,9 @@ const First30DaysSection = () => {
                 />
               ))}
             </div>
-            <AddItemButton 
-              onClick={() => addPhaseListItem('assumptions')} 
-              label="Add assumption" 
+            <AddItemButton
+              onClick={() => addPhaseListItem('assumptions')}
+              label="Add assumption"
             />
           </div>
         </div>
@@ -2465,10 +2776,10 @@ const First30DaysSection = () => {
         {phases[activePhase].keyDeliverables && (
           <div style={{ marginTop: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-              <div style={{ 
-                width: '20px', 
-                height: '20px', 
-                borderRadius: '4px', 
+              <div style={{
+                width: '20px',
+                height: '20px',
+                borderRadius: '4px',
                 backgroundColor: phases[activePhase].color + '20',
                 display: 'flex',
                 alignItems: 'center',
@@ -2487,7 +2798,7 @@ const First30DaysSection = () => {
                   onChange={(v) => updatePhaseListItem('keyDeliverables', i, v)}
                   onDelete={() => deletePhaseListItem('keyDeliverables', i)}
                   color={phases[activePhase].color}
-                  style={{ 
+                  style={{
                     padding: '8px',
                     backgroundColor: i % 2 === 0 ? phases[activePhase].color + '10' : 'white',
                     borderRadius: '6px',
@@ -2496,12 +2807,77 @@ const First30DaysSection = () => {
                 />
               ))}
             </div>
-            <AddItemButton 
-              onClick={() => addPhaseListItem('keyDeliverables')} 
-              label="Add deliverable" 
+            <AddItemButton
+              onClick={() => addPhaseListItem('keyDeliverables')}
+              label="Add deliverable"
             />
           </div>
         )}
+      </Card>
+
+      {/* General SA: Key Activities of Value & Replication */}
+      <Card style={{ marginBottom: '24px', borderLeft: `4px solid ${colors.info}` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+          <div style={{
+            width: '20px',
+            height: '20px',
+            borderRadius: '4px',
+            backgroundColor: colors.info + '20',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '12px'
+          }}>
+            🔄
+          </div>
+          <h5 style={{ fontSize: '16px', fontWeight: '600', color: colors.text, margin: 0 }}>General SA: Key Activities of Value & Replication</h5>
+        </div>
+        <p style={{ fontSize: '14px', color: colors.textSecondary, lineHeight: 1.6, marginBottom: '20px' }}>
+          <EditableText
+            value={generalSADescription}
+            onChange={setGeneralSADescription}
+            style={{ fontSize: '14px', color: colors.textSecondary }}
+            multiline
+          />
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+          <div>
+            <h6 style={{ fontSize: '13px', fontWeight: '600', color: colors.info, marginBottom: '10px' }}>Identifying key activities of value</h6>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {generalSAIdentifying.map((item, i) => (
+                <EditableListItem
+                  key={i}
+                  value={item}
+                  onChange={(v) => setGeneralSAIdentifying(prev => prev.map((x, idx) => idx === i ? v : x))}
+                  onDelete={() => setGeneralSAIdentifying(prev => prev.filter((_, idx) => idx !== i))}
+                  color={colors.info}
+                />
+              ))}
+            </div>
+            <AddItemButton
+              onClick={() => setGeneralSAIdentifying(prev => [...prev, 'New item - click to edit'])}
+              label="Add item"
+            />
+          </div>
+          <div>
+            <h6 style={{ fontSize: '13px', fontWeight: '600', color: colors.info, marginBottom: '10px' }}>Creating process to replicate</h6>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {generalSAReplication.map((item, i) => (
+                <EditableListItem
+                  key={i}
+                  value={item}
+                  onChange={(v) => setGeneralSAReplication(prev => prev.map((x, idx) => idx === i ? v : x))}
+                  onDelete={() => setGeneralSAReplication(prev => prev.filter((_, idx) => idx !== i))}
+                  color={colors.info}
+                />
+              ))}
+            </div>
+            <AddItemButton
+              onClick={() => setGeneralSAReplication(prev => [...prev, 'New item - click to edit'])}
+              label="Add item"
+            />
+          </div>
+        </div>
       </Card>
 
       {/* Key Outcomes by Day 30 */}
@@ -2871,9 +3247,22 @@ const MasonryItems = ({ items, columnCount, gap, expandedCards, toggleCard, getC
   );
 };
 
-// From the Field Section
+// From the Field Section — three main dropdowns with general summary + cards inside
 const FromTheFieldSection = () => {
   const { isEditMode } = useContext(EditModeContext);
+  const [expandedCategories, setExpandedCategories] = useState({ collaboration: true, sales: true, agent: true });
+  const toggleCategory = (key) => setExpandedCategories(prev => ({ ...prev, [key]: !prev[key] }));
+  const isCategoryExpanded = (key) => expandedCategories[key] !== false;
+
+  const [collaborationSummary, setCollaborationSummary] = useLocalStorage('leadershipPlaybook_collaborationSummary',
+    'Field feedback points to lack of consistent SA/AE pairings, role ambiguity (demo execution vs. strategic partnership), and need for pod structures and clearer guidelines on when to engage SAs.'
+  );
+  const [salesProcessSummary, setSalesProcessSummary] = useLocalStorage('leadershipPlaybook_salesProcessSummary',
+    'Feedback highlights misaligned use case selection, POC process problems, pre-sales/post-sales disconnect, and missing standardized handoffs—information exists but isn\'t accessible or followed.'
+  );
+  const [agentPositioningSummary, setAgentPositioningSummary] = useLocalStorage('leadershipPlaybook_agentPositioningSummary',
+    'Internal messaging positions Writer Agent as replacement rather than additional tool; need to highlight interconnectivity and fix demo loading/performance and differentiation story.'
+  );
 
   const [collaborationGaps, setCollaborationGaps] = useLocalStorage('leadershipPlaybook_collaborationGaps', [
     {
@@ -3160,11 +3549,36 @@ const FromTheFieldSection = () => {
 
   return (
     <div>
-      {/* SA/AE Collaboration Gaps */}
-      <div style={{ marginBottom: '48px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
-          <h3 style={{ fontSize: '24px', fontWeight: '600', color: colors.text, margin: 0 }}>SA/AE Collaboration Gaps</h3>
-          {isEditMode && (
+      {/* SA/AE Collaboration Gaps — dropdown category */}
+      <Card style={{ marginBottom: '24px', borderLeft: `4px solid ${colors.accent}` }}>
+        <button
+          type="button"
+          onClick={() => toggleCategory('collaboration')}
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            gap: '12px',
+            padding: 0,
+            border: 'none',
+            background: 'none',
+            cursor: 'pointer',
+            textAlign: 'left'
+          }}
+        >
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h3 style={{ fontSize: '24px', fontWeight: '600', color: colors.text, margin: 0 }}>SA/AE Collaboration Gaps</h3>
+            {!isCategoryExpanded('collaboration') && collaborationSummary && (
+              <p style={{ fontSize: '14px', color: colors.textSecondary, marginTop: '10px', marginBottom: 0, lineHeight: 1.5 }}>
+                {collaborationSummary}
+              </p>
+            )}
+          </div>
+          <span style={{ fontSize: '14px', color: colors.textMuted, flexShrink: 0 }}>{isCategoryExpanded('collaboration') ? '▲' : '▼'}</span>
+        </button>
+        {isEditMode && (
+          <div style={{ marginTop: '12px' }}>
             <button
               onClick={addGapItem}
               style={{
@@ -3180,89 +3594,127 @@ const FromTheFieldSection = () => {
             >
               + Add Category
             </button>
-          )}
-        </div>
-        {collaborationGaps.map((gap, index) => (
-          <Card key={index} style={{ marginBottom: '24px', borderLeft: `4px solid ${colors.accent}` }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-              <div style={{ flex: 1 }}>
-                <EditableText
-                  value={gap.category}
-                  onChange={(v) => updateGapItem(index, 'category', v)}
-                  style={{ fontSize: '18px', fontWeight: '600', color: colors.text, marginBottom: '8px' }}
-                />
-                <EditableText
-                  value={gap.description}
-                  onChange={(v) => updateGapItem(index, 'description', v)}
-                  style={{ fontSize: '14px', color: colors.textSecondary, marginBottom: '8px' }}
-                  multiline
-                />
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                  <span style={{ fontSize: '12px', color: colors.textMuted }}>Source:</span>
-                  <EditableText
-                    value={gap.source}
-                    onChange={(v) => updateGapItem(index, 'source', v)}
-                    style={{ fontSize: '12px', color: colors.textMuted, fontStyle: 'italic' }}
-                  />
-                </div>
-              </div>
-              {isEditMode && (
-                <button
-                  onClick={() => deleteGapItem(index)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: colors.danger,
-                    cursor: 'pointer',
-                    padding: '4px 8px',
-                    fontSize: '16px'
-                  }}
-                >
-                  ×
-                </button>
-              )}
+          </div>
+        )}
+        {isCategoryExpanded('collaboration') && (
+          <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: `1px solid ${colors.borderLight}` }}>
+            <div style={{ marginBottom: '24px', padding: '16px', backgroundColor: colors.gray50, borderRadius: '8px', border: `1px solid ${colors.borderLight}` }}>
+              <div style={{ fontSize: '12px', fontWeight: '600', color: colors.textMuted, marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Summary of sentiment</div>
+              <EditableText
+                value={collaborationSummary}
+                onChange={setCollaborationSummary}
+                style={{ fontSize: '15px', color: colors.textSecondary, lineHeight: 1.6 }}
+                multiline
+              />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-              <div>
-                <h5 style={{ fontSize: '14px', fontWeight: '600', color: colors.danger, marginBottom: '12px' }}>Issues</h5>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {gap.issues.map((item, i) => (
-                    <EditableListItem
-                      key={i}
-                      value={item}
-                      onChange={(v) => updateGapListItem(index, 'issues', i, v)}
-                      onDelete={() => deleteGapListItem(index, 'issues', i)}
-                      color={colors.danger}
+            {collaborationGaps.map((gap, index) => (
+              <Card key={index} style={{ marginBottom: '24px', borderLeft: `4px solid ${colors.accent}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+                  <div style={{ flex: 1 }}>
+                    <EditableText
+                      value={gap.category}
+                      onChange={(v) => updateGapItem(index, 'category', v)}
+                      style={{ fontSize: '18px', fontWeight: '600', color: colors.text, marginBottom: '8px' }}
                     />
-                  ))}
-                </div>
-                <AddItemButton onClick={() => addGapListItem(index, 'issues')} label="Add issue" />
-              </div>
-              <div>
-                <h5 style={{ fontSize: '14px', fontWeight: '600', color: colors.success, marginBottom: '12px' }}>Recommendations</h5>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {gap.recommendations.map((item, i) => (
-                    <EditableListItem
-                      key={i}
-                      value={item}
-                      onChange={(v) => updateGapListItem(index, 'recommendations', i, v)}
-                      onDelete={() => deleteGapListItem(index, 'recommendations', i)}
-                      color={colors.success}
+                    <EditableText
+                      value={gap.description}
+                      onChange={(v) => updateGapItem(index, 'description', v)}
+                      style={{ fontSize: '14px', color: colors.textSecondary, marginBottom: '8px' }}
+                      multiline
                     />
-                  ))}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                      <span style={{ fontSize: '12px', color: colors.textMuted }}>Source:</span>
+                      <EditableText
+                        value={gap.source}
+                        onChange={(v) => updateGapItem(index, 'source', v)}
+                        style={{ fontSize: '12px', color: colors.textMuted, fontStyle: 'italic' }}
+                      />
+                    </div>
+                  </div>
+                  {isEditMode && (
+                    <button
+                      onClick={() => deleteGapItem(index)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: colors.danger,
+                        cursor: 'pointer',
+                        padding: '4px 8px',
+                        fontSize: '16px'
+                      }}
+                    >
+                      ×
+                    </button>
+                  )}
                 </div>
-                <AddItemButton onClick={() => addGapListItem(index, 'recommendations')} label="Add recommendation" />
-              </div>
-            </div>
-          </Card>
-        ))}
-      </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div>
+                    <h5 style={{ fontSize: '14px', fontWeight: '600', color: colors.danger, marginBottom: '12px' }}>Issues</h5>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {gap.issues.map((item, i) => (
+                        <EditableListItem
+                          key={i}
+                          value={item}
+                          onChange={(v) => updateGapListItem(index, 'issues', i, v)}
+                          onDelete={() => deleteGapListItem(index, 'issues', i)}
+                          color={colors.danger}
+                        />
+                      ))}
+                    </div>
+                    <AddItemButton onClick={() => addGapListItem(index, 'issues')} label="Add issue" />
+                  </div>
+                  <div>
+                    <h5 style={{ fontSize: '14px', fontWeight: '600', color: colors.success, marginBottom: '12px' }}>Recommendations</h5>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {gap.recommendations.map((item, i) => (
+                        <EditableListItem
+                          key={i}
+                          value={item}
+                          onChange={(v) => updateGapListItem(index, 'recommendations', i, v)}
+                          onDelete={() => deleteGapListItem(index, 'recommendations', i)}
+                          color={colors.success}
+                        />
+                      ))}
+                    </div>
+                    <AddItemButton onClick={() => addGapListItem(index, 'recommendations')} label="Add recommendation" />
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </Card>
 
-      {/* Sales Process Issues */}
-      <div style={{ marginBottom: '48px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
-          <h3 style={{ fontSize: '24px', fontWeight: '600', color: colors.text, margin: 0 }}>Sales Process Issues</h3>
-          {isEditMode && (
+      {/* Sales Process Issues — dropdown category */}
+      <Card style={{ marginBottom: '24px', borderLeft: `4px solid ${colors.warning}` }}>
+        <button
+          type="button"
+          onClick={() => toggleCategory('sales')}
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            gap: '12px',
+            padding: 0,
+            border: 'none',
+            background: 'none',
+            cursor: 'pointer',
+            textAlign: 'left'
+          }}
+        >
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h3 style={{ fontSize: '24px', fontWeight: '600', color: colors.text, margin: 0 }}>Sales Process Issues</h3>
+            {!isCategoryExpanded('sales') && salesProcessSummary && (
+              <p style={{ fontSize: '14px', color: colors.textSecondary, marginTop: '10px', marginBottom: 0, lineHeight: 1.5 }}>
+                {salesProcessSummary}
+              </p>
+            )}
+          </div>
+          <span style={{ fontSize: '14px', color: colors.textMuted, flexShrink: 0 }}>{isCategoryExpanded('sales') ? '▲' : '▼'}</span>
+        </button>
+        {isEditMode && (
+          <div style={{ marginTop: '12px' }}>
             <button
               onClick={addSalesIssueItem}
               style={{
@@ -3278,145 +3730,196 @@ const FromTheFieldSection = () => {
             >
               + Add Category
             </button>
-          )}
-        </div>
-        {salesProcessIssues.map((issue, index) => (
-          <Card key={index} style={{ marginBottom: '24px', borderLeft: `4px solid ${colors.warning}` }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-              <div style={{ flex: 1 }}>
-                <EditableText
-                  value={issue.category}
-                  onChange={(v) => updateSalesIssueItem(index, 'category', v)}
-                  style={{ fontSize: '18px', fontWeight: '600', color: colors.text, marginBottom: '8px' }}
-                />
-                <EditableText
-                  value={issue.description}
-                  onChange={(v) => updateSalesIssueItem(index, 'description', v)}
-                  style={{ fontSize: '14px', color: colors.textSecondary, marginBottom: '8px' }}
-                  multiline
-                />
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                  <span style={{ fontSize: '12px', color: colors.textMuted }}>Source:</span>
-                  <EditableText
-                    value={issue.source}
-                    onChange={(v) => updateSalesIssueItem(index, 'source', v)}
-                    style={{ fontSize: '12px', color: colors.textMuted, fontStyle: 'italic' }}
-                  />
-                </div>
-              </div>
-              {isEditMode && (
-                <button
-                  onClick={() => deleteSalesIssueItem(index)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: colors.danger,
-                    cursor: 'pointer',
-                    padding: '4px 8px',
-                    fontSize: '16px'
-                  }}
-                >
-                  ×
-                </button>
-              )}
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-              <div>
-                <h5 style={{ fontSize: '14px', fontWeight: '600', color: colors.danger, marginBottom: '12px' }}>Issues</h5>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {issue.issues.map((item, i) => (
-                    <EditableListItem
-                      key={i}
-                      value={item}
-                      onChange={(v) => updateSalesIssueListItem(index, 'issues', i, v)}
-                      onDelete={() => deleteSalesIssueListItem(index, 'issues', i)}
-                      color={colors.danger}
-                    />
-                  ))}
-                </div>
-                <AddItemButton onClick={() => addSalesIssueListItem(index, 'issues')} label="Add issue" />
-              </div>
-              <div>
-                <h5 style={{ fontSize: '14px', fontWeight: '600', color: colors.success, marginBottom: '12px' }}>Recommendations</h5>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {issue.recommendations.map((item, i) => (
-                    <EditableListItem
-                      key={i}
-                      value={item}
-                      onChange={(v) => updateSalesIssueListItem(index, 'recommendations', i, v)}
-                      onDelete={() => deleteSalesIssueListItem(index, 'recommendations', i)}
-                      color={colors.success}
-                    />
-                  ))}
-                </div>
-                <AddItemButton onClick={() => addSalesIssueListItem(index, 'recommendations')} label="Add recommendation" />
-              </div>
-            </div>
-          </Card>
-        ))}
-      </div>
-
-      {/* Writer Agent Positioning Challenges */}
-      <div>
-        <h3 style={{ fontSize: '24px', fontWeight: '600', color: colors.text, marginBottom: '24px' }}>Writer Agent Positioning Challenges</h3>
-        {agentPositioning.map((item, index) => (
-          <Card key={index} style={{ marginBottom: '24px', borderLeft: `4px solid ${colors.purple}` }}>
-            <div style={{ marginBottom: '16px' }}>
+          </div>
+        )}
+        {isCategoryExpanded('sales') && (
+          <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: `1px solid ${colors.borderLight}` }}>
+            <div style={{ marginBottom: '24px', padding: '16px', backgroundColor: colors.gray50, borderRadius: '8px', border: `1px solid ${colors.borderLight}` }}>
+              <div style={{ fontSize: '12px', fontWeight: '600', color: colors.textMuted, marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Summary of sentiment</div>
               <EditableText
-                value={item.category}
-                onChange={(v) => updateAgentItem(index, 'category', v)}
-                style={{ fontSize: '18px', fontWeight: '600', color: colors.text, marginBottom: '8px' }}
-              />
-              <EditableText
-                value={item.description}
-                onChange={(v) => updateAgentItem(index, 'description', v)}
-                style={{ fontSize: '14px', color: colors.textSecondary, marginBottom: '8px' }}
+                value={salesProcessSummary}
+                onChange={setSalesProcessSummary}
+                style={{ fontSize: '15px', color: colors.textSecondary, lineHeight: 1.6 }}
                 multiline
               />
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                <span style={{ fontSize: '12px', color: colors.textMuted }}>Source:</span>
-                <EditableText
-                  value={item.source}
-                  onChange={(v) => updateAgentItem(index, 'source', v)}
-                  style={{ fontSize: '12px', color: colors.textMuted, fontStyle: 'italic' }}
-                />
-              </div>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-              <div>
-                <h5 style={{ fontSize: '14px', fontWeight: '600', color: colors.danger, marginBottom: '12px' }}>Issues</h5>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {item.issues.map((issueItem, i) => (
-                    <EditableListItem
-                      key={i}
-                      value={issueItem}
-                      onChange={(v) => updateAgentListItem(index, 'issues', i, v)}
-                      onDelete={() => deleteAgentListItem(index, 'issues', i)}
-                      color={colors.danger}
+            {salesProcessIssues.map((issue, index) => (
+              <Card key={index} style={{ marginBottom: '24px', borderLeft: `4px solid ${colors.warning}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+                  <div style={{ flex: 1 }}>
+                    <EditableText
+                      value={issue.category}
+                      onChange={(v) => updateSalesIssueItem(index, 'category', v)}
+                      style={{ fontSize: '18px', fontWeight: '600', color: colors.text, marginBottom: '8px' }}
                     />
-                  ))}
-                </div>
-                <AddItemButton onClick={() => addAgentListItem(index, 'issues')} label="Add issue" />
-              </div>
-              <div>
-                <h5 style={{ fontSize: '14px', fontWeight: '600', color: colors.success, marginBottom: '12px' }}>Recommendations</h5>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {item.recommendations.map((recItem, i) => (
-                    <EditableListItem
-                      key={i}
-                      value={recItem}
-                      onChange={(v) => updateAgentListItem(index, 'recommendations', i, v)}
-                      onDelete={() => deleteAgentListItem(index, 'recommendations', i)}
-                      color={colors.success}
+                    <EditableText
+                      value={issue.description}
+                      onChange={(v) => updateSalesIssueItem(index, 'description', v)}
+                      style={{ fontSize: '14px', color: colors.textSecondary, marginBottom: '8px' }}
+                      multiline
                     />
-                  ))}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                      <span style={{ fontSize: '12px', color: colors.textMuted }}>Source:</span>
+                      <EditableText
+                        value={issue.source}
+                        onChange={(v) => updateSalesIssueItem(index, 'source', v)}
+                        style={{ fontSize: '12px', color: colors.textMuted, fontStyle: 'italic' }}
+                      />
+                    </div>
+                  </div>
+                  {isEditMode && (
+                    <button
+                      onClick={() => deleteSalesIssueItem(index)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: colors.danger,
+                        cursor: 'pointer',
+                        padding: '4px 8px',
+                        fontSize: '16px'
+                      }}
+                    >
+                      ×
+                    </button>
+                  )}
                 </div>
-                <AddItemButton onClick={() => addAgentListItem(index, 'recommendations')} label="Add recommendation" />
-              </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div>
+                    <h5 style={{ fontSize: '14px', fontWeight: '600', color: colors.danger, marginBottom: '12px' }}>Issues</h5>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {issue.issues.map((item, i) => (
+                        <EditableListItem
+                          key={i}
+                          value={item}
+                          onChange={(v) => updateSalesIssueListItem(index, 'issues', i, v)}
+                          onDelete={() => deleteSalesIssueListItem(index, 'issues', i)}
+                          color={colors.danger}
+                        />
+                      ))}
+                    </div>
+                    <AddItemButton onClick={() => addSalesIssueListItem(index, 'issues')} label="Add issue" />
+                  </div>
+                  <div>
+                    <h5 style={{ fontSize: '14px', fontWeight: '600', color: colors.success, marginBottom: '12px' }}>Recommendations</h5>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {issue.recommendations.map((item, i) => (
+                        <EditableListItem
+                          key={i}
+                          value={item}
+                          onChange={(v) => updateSalesIssueListItem(index, 'recommendations', i, v)}
+                          onDelete={() => deleteSalesIssueListItem(index, 'recommendations', i)}
+                          color={colors.success}
+                        />
+                      ))}
+                    </div>
+                    <AddItemButton onClick={() => addSalesIssueListItem(index, 'recommendations')} label="Add recommendation" />
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {/* Writer Agent Positioning Challenges — dropdown category */}
+      <Card style={{ marginBottom: '24px', borderLeft: `4px solid ${colors.purple}` }}>
+        <button
+          type="button"
+          onClick={() => toggleCategory('agent')}
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            gap: '12px',
+            padding: 0,
+            border: 'none',
+            background: 'none',
+            cursor: 'pointer',
+            textAlign: 'left'
+          }}
+        >
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h3 style={{ fontSize: '24px', fontWeight: '600', color: colors.text, margin: 0 }}>Writer Agent Positioning Challenges</h3>
+            {!isCategoryExpanded('agent') && agentPositioningSummary && (
+              <p style={{ fontSize: '14px', color: colors.textSecondary, marginTop: '10px', marginBottom: 0, lineHeight: 1.5 }}>
+                {agentPositioningSummary}
+              </p>
+            )}
+          </div>
+          <span style={{ fontSize: '14px', color: colors.textMuted, flexShrink: 0 }}>{isCategoryExpanded('agent') ? '▲' : '▼'}</span>
+        </button>
+        {isCategoryExpanded('agent') && (
+          <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: `1px solid ${colors.borderLight}` }}>
+            <div style={{ marginBottom: '24px', padding: '16px', backgroundColor: colors.gray50, borderRadius: '8px', border: `1px solid ${colors.borderLight}` }}>
+              <div style={{ fontSize: '12px', fontWeight: '600', color: colors.textMuted, marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Summary of sentiment</div>
+              <EditableText
+                value={agentPositioningSummary}
+                onChange={setAgentPositioningSummary}
+                style={{ fontSize: '15px', color: colors.textSecondary, lineHeight: 1.6 }}
+                multiline
+              />
             </div>
-          </Card>
-        ))}
-      </div>
+            {agentPositioning.map((item, index) => (
+              <Card key={index} style={{ marginBottom: '24px', borderLeft: `4px solid ${colors.purple}` }}>
+                <div style={{ marginBottom: '16px' }}>
+                  <EditableText
+                    value={item.category}
+                    onChange={(v) => updateAgentItem(index, 'category', v)}
+                    style={{ fontSize: '18px', fontWeight: '600', color: colors.text, marginBottom: '8px' }}
+                  />
+                  <EditableText
+                    value={item.description}
+                    onChange={(v) => updateAgentItem(index, 'description', v)}
+                    style={{ fontSize: '14px', color: colors.textSecondary, marginBottom: '8px' }}
+                    multiline
+                  />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                    <span style={{ fontSize: '12px', color: colors.textMuted }}>Source:</span>
+                    <EditableText
+                      value={item.source}
+                      onChange={(v) => updateAgentItem(index, 'source', v)}
+                      style={{ fontSize: '12px', color: colors.textMuted, fontStyle: 'italic' }}
+                    />
+                  </div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div>
+                    <h5 style={{ fontSize: '14px', fontWeight: '600', color: colors.danger, marginBottom: '12px' }}>Issues</h5>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {item.issues.map((issueItem, i) => (
+                        <EditableListItem
+                          key={i}
+                          value={issueItem}
+                          onChange={(v) => updateAgentListItem(index, 'issues', i, v)}
+                          onDelete={() => deleteAgentListItem(index, 'issues', i)}
+                          color={colors.danger}
+                        />
+                      ))}
+                    </div>
+                    <AddItemButton onClick={() => addAgentListItem(index, 'issues')} label="Add issue" />
+                  </div>
+                  <div>
+                    <h5 style={{ fontSize: '14px', fontWeight: '600', color: colors.success, marginBottom: '12px' }}>Recommendations</h5>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {item.recommendations.map((recItem, i) => (
+                        <EditableListItem
+                          key={i}
+                          value={recItem}
+                          onChange={(v) => updateAgentListItem(index, 'recommendations', i, v)}
+                          onDelete={() => deleteAgentListItem(index, 'recommendations', i)}
+                          color={colors.success}
+                        />
+                      ))}
+                    </div>
+                    <AddItemButton onClick={() => addAgentListItem(index, 'recommendations')} label="Add recommendation" />
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </Card>
     </div>
   );
 };
@@ -4026,32 +4529,20 @@ export default function App() {
     title: 'My Leadership Playbook',
     description: 'Building and sustaining a high-performing West Coast SA team at Writer.',
     context: [
-      'West Coast SA leader position targeted for February',
-      'Current 3:1 AE-to-SA ratio will remain unchanged',
-      '40-hour work weeks maximum—additional headcount for overages',
-      'Backfill positions (Harry, Hojoon replacements) tied to financial year planning',
-      'Agent Builder being sunset—transitioning to applications focus',
-      'Role evolution toward deeper security conversations and consultative approach',
-      'Field feedback: West team operates on round-robin assignment rather than consistent SA/AE pairings',
-      'Field feedback: SAs too reactive and siloed—need proactive partnership vs "demo monkey" approach',
-      'Field feedback: No standardized handoff processes between AEs and SAs—information exists but not accessible',
-      'Field feedback: POC process problems—excessive time on complex POCs never used in production',
-      'Field feedback: Pre-sales/post-sales disconnect—deals lacking clear post-signature plans',
-      'Field feedback: Writer Agent positioning issues—internal messaging wrong, positioned as replacement vs. additional tool'
+      'West Coast SA leader role launching February; 3:1 AE-to-SA ratio holds, backfills tied to FY planning',
+      'Agent Builder sunsetting → team pivoting to Applications focus with deeper security/consultative positioning',
+      'Field feedback signals structural gaps: reactive siloed work, inconsistent SA/AE pairings, POC inefficiency, weak pre-to-post-sales handoffs'
     ],
-    opportunity: [
-      'Establish trust and understand current state through comprehensive 1:1s and stakeholder meetings (Days 1-10)',
-      'Implement pod structures with consistent SA/AE pairings to systematize successful multi-deal relationships',
-      'Create standardized handoff processes and POC check-in templates for systematic execution (Days 11-20)',
-      'Build coaching infrastructure with structured onboarding, post-mortems, and shadow call programs (Days 21-30)',
-      'Launch leading metrics dashboard and validate process improvements with data-driven results',
-      'Present 30-day findings and establish Q2 priorities based on validated learnings',
-      'Require executive sponsor alignment and clear success criteria before starting POC evaluations',
-      'Develop strategic partnership capabilities beyond demo execution—ROI storytelling and business acumen',
-      'Establish guardrails for what scales in post-sales vs. custom builds to prevent duplicate work cycles',
-      'Reposition Writer Agent messaging and highlight interconnectivity between Writer tools',
-      'Create systematic content sharing by industry/vertical for better knowledge transfer',
-      'Build muscle memory for successful deal closure through accessible exit gates and documented tactics'
+    strategicBets: [
+      'Pod structures over round-robin: Consistent SA/AE pairings to build deeper account knowledge and multi-deal momentum',
+      'Process before scale: Standardized handoffs, POC templates, and clear exit gates—stop the "information exists but isn\'t accessible" problem',
+      'Coaching as infrastructure: Structured onboarding, post-mortems, and shadow programs to build repeatable excellence, not hero culture',
+      'Metrics that lead, not lag: Dashboard to validate what\'s working before doubling down'
+    ],
+    strategicPriorities: [
+      'Shift SAs from "demo monkey" to strategic partner (ROI storytelling, business acumen)',
+      'Fix Writer Agent positioning—complement, not replacement',
+      'Establish guardrails: what scales in post-sales vs. custom builds'
     ]
   };
 
@@ -4173,8 +4664,8 @@ export default function App() {
                 <StatCard value={30} label="Day Plan" color={colors.success} />
               </div>
 
-              {/* Two Column Layout */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+              {/* Context, Strategic Bets, Strategic Priorities */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
                 <Card>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
                     <div style={{
@@ -4192,7 +4683,7 @@ export default function App() {
                     <h3 style={{ fontSize: '16px', fontWeight: '600', margin: 0, color: colors.text }}>Context</h3>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {overviewContent.context.map((p, i) => (
+                    {(overviewContent.context || []).map((p, i) => (
                       <EditableListItem
                         key={i}
                         value={p}
@@ -4219,20 +4710,50 @@ export default function App() {
                     }}>
                       🎯
                     </div>
-                    <h3 style={{ fontSize: '16px', fontWeight: '600', margin: 0, color: colors.text }}>The Opportunity</h3>
+                    <h3 style={{ fontSize: '16px', fontWeight: '600', margin: 0, color: colors.text }}>Strategic Bets</h3>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {overviewContent.opportunity.map((p, i) => (
+                    {(overviewContent.strategicBets || []).map((p, i) => (
                       <EditableListItem
                         key={i}
                         value={p}
-                        onChange={(v) => updateOverviewListItem('opportunity', i, v)}
-                        onDelete={() => deleteOverviewListItem('opportunity', i)}
+                        onChange={(v) => updateOverviewListItem('strategicBets', i, v)}
+                        onDelete={() => deleteOverviewListItem('strategicBets', i)}
                         color={colors.success}
                       />
                     ))}
                   </div>
-                  <AddItemButton onClick={() => addOverviewListItem('opportunity')} label="Add opportunity" />
+                  <AddItemButton onClick={() => addOverviewListItem('strategicBets')} label="Add strategic bet" />
+                </Card>
+
+                <Card>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                    <div style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '8px',
+                      backgroundColor: colors.accent + '15',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '16px'
+                    }}>
+                      🧭
+                    </div>
+                    <h3 style={{ fontSize: '16px', fontWeight: '600', margin: 0, color: colors.text }}>Strategic Priorities</h3>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {(overviewContent.strategicPriorities || []).map((p, i) => (
+                      <EditableListItem
+                        key={i}
+                        value={p}
+                        onChange={(v) => updateOverviewListItem('strategicPriorities', i, v)}
+                        onDelete={() => deleteOverviewListItem('strategicPriorities', i)}
+                        color={colors.accent}
+                      />
+                    ))}
+                  </div>
+                  <AddItemButton onClick={() => addOverviewListItem('strategicPriorities')} label="Add priority" />
                 </Card>
               </div>
             </div>
