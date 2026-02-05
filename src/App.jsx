@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, createContext, useContext, useCallb
 import { createPortal } from 'react-dom';
 import { select } from 'd3-selection';
 import { scaleLinear } from 'd3-scale';
-import { line, curveMonotoneX } from 'd3-shape';
+import { line, curveMonotoneX, arc } from 'd3-shape';
 import { axisBottom, axisLeft } from 'd3-axis';
 import 'd3-transition'; // extends selection with .transition()
 
@@ -48,13 +48,13 @@ const SA_LEADERSHIP_FRAMEWORK = [
   { label: 'Identify', short: 'What to spot' },
   { label: 'Action', short: 'What to do' },
   { label: 'Scale', short: 'How to scale' },
-  { label: 'SA Efficiency', short: 'SA efficiency' }
+  { label: 'Share', short: 'Share' }
 ];
 
-// Default "What you'd adapt for SA leadership" (condensed)
-const DEFAULT_SA_LEADERSHIP_LENS = `Core tension: qualification rigor → technical leverage. Ensure technical validation before commercial momentum.
-Stage 0–5: define artifacts, stakeholder mapping, and validation criteria before each gate.
-Hidden lift: SAs absorb cross-functional technical complexity so engineers focus on solution design.`;
+// Default "From experience to SA Leadership" — sub-bullets under Stronger West SA Strat Team
+const DEFAULT_SA_LEADERSHIP_LENS = `• IC Rigor: Take what I've learned as an IC on the Strat West team and leader in the Partnerships org and create ways to train muscles for good engagements and process to enforce.
+• Cross-team alignment: Having built close working relationships with teams across sales, product and post-sales, leverage those relationships to make sure changes and processes going into place align.
+• CSC, standards, and ownership: Building out CSC, the security ROE, Partner standards for SAs and owning the Adobe/Salesforce partner relationship. Allow SAs to find their "extracurricular" on the team so they can also do what is meaningful for them.`;
 
 // Local Storage Helper Functions
 const saveToStorage = (key, value) => {
@@ -91,7 +91,7 @@ const useLocalStorage = (key, initialValue) => {
     // For overviewContent: push condensed overview to all users (override localStorage)
     if (key === 'leadershipPlaybook_overviewContent' && stored && initialValue) {
       const storedVersion = stored._version || 0;
-      const currentVersion = 10; // 10 = Condensed overview (direct, straight to the point)
+      const currentVersion = 13; // 13 = SA leadership sub-bullets spacing (single newlines, tighter)
 
       if (storedVersion < currentVersion) {
         const updated = { ...initialValue, _version: currentVersion };
@@ -640,6 +640,112 @@ const Card = ({ children, style = {} }) => (
   </div>
 );
 
+// Four principles: D3 pie in center; cards in corners (blue top-left, purple top-right, green bottom-right, yellow bottom-left). No rotation so text stays readable.
+const PrinciplesRadialView = ({ principles, updatePrinciple, isEditMode, setModalPrincipleIndex }) => {
+  const containerRef = useRef(null);
+  const svgRef = useRef(null);
+  const [dims, setDims] = useState({ width: 0, height: 0 });
+  const cx = dims.width / 2;
+  const cy = dims.height / 2;
+  const innerR = 40;
+  const cardW = 280;
+  const cardH = 140;
+  const gap = -8;
+  const outerR = Math.min(dims.width, dims.height) * 0.2;
+  const cardRadius = outerR + gap;
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const el = containerRef.current;
+    const update = () => setDims({ width: el.offsetWidth, height: el.offsetHeight });
+    update();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null;
+    if (ro) ro.observe(el);
+    const t = setTimeout(update, 100);
+    return () => { clearTimeout(t); if (ro) ro.disconnect(); };
+  }, []);
+
+  // D3 arc: 0 = 12 o'clock (top), positive diff = clockwise. Each segment needs start < end so it draws the 90° wedge (not the 270° arc).
+  const segmentAngles = [
+    { start: 3 * Math.PI / 2, end: 2 * Math.PI },
+    { start: 0, end: Math.PI / 2 },
+    { start: Math.PI / 2, end: Math.PI },
+    { start: Math.PI, end: 3 * Math.PI / 2 }
+  ];
+  useEffect(() => {
+    if (!svgRef.current || dims.width < 10 || principles.length !== 4) return;
+    const svg = select(svgRef.current);
+    svg.selectAll('*').remove();
+    const g = svg.append('g').attr('transform', `translate(${cx},${cy})`);
+    principles.forEach((p, i) => {
+      const { start, end } = segmentAngles[i];
+      const arcGen = arc()
+        .innerRadius(innerR)
+        .outerRadius(outerR)
+        .startAngle(start)
+        .endAngle(end);
+      g.append('path')
+        .attr('d', arcGen())
+        .attr('fill', (p.color || colors.accent) + '18')
+        .attr('stroke', (p.color || colors.accent) + '50')
+        .attr('stroke-width', 2)
+        .style('transition', 'fill 0.25s ease');
+    });
+  }, [dims, cx, cy, innerR, outerR, principles]);
+
+  // Card positions: just outside the pie (cardRadius = outerR + gap). [0] blue top-left, [1] purple top-right, [2] green bottom-right, [3] yellow bottom-left.
+  const positions = principles.length === 4 && dims.width >= 10
+    ? [
+        { x: cx - cardRadius - cardW, y: cy - cardRadius - cardH },
+        { x: cx + cardRadius, y: cy - cardRadius - cardH },
+        { x: cx + cardRadius, y: cy + cardRadius },
+        { x: cx - cardRadius - cardW, y: cy + cardRadius }
+      ]
+    : [];
+
+  return (
+    <div ref={containerRef} style={{ position: 'relative', width: '100%', height: '680px', marginBottom: '24px', minHeight: '560px' }}>
+      <svg ref={svgRef} width={dims.width} height={dims.height} style={{ display: 'block', position: 'absolute', left: 0, top: 0 }} />
+      {principles.map((principle, i) => (
+        <div
+          key={i}
+          role="button"
+          tabIndex={0}
+          onClick={() => !isEditMode && setModalPrincipleIndex(i)}
+          onKeyDown={(e) => !isEditMode && (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), setModalPrincipleIndex(i))}
+          onMouseEnter={(e) => { if (!isEditMode) { e.currentTarget.style.transform = 'translateY(-4px) scale(1.02)'; e.currentTarget.style.boxShadow = `0 12px 28px ${(principle.color || colors.accent)}30`; } }}
+          onMouseLeave={(e) => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}
+          style={{
+            position: 'absolute',
+            left: positions[i]?.x ?? 0,
+            top: positions[i]?.y ?? 0,
+            width: cardW,
+            minHeight: cardH,
+            cursor: isEditMode ? 'default' : 'pointer',
+            transition: 'transform 0.25s ease, box-shadow 0.25s ease',
+            outline: 'none'
+          }}
+        >
+          <Card style={{ borderLeft: `4px solid ${principle.color}`, height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', boxShadow: `0 4px 16px ${(principle.color || colors.accent)}20` }}>
+            <h3 style={{ fontSize: '15px', fontWeight: '600', color: colors.text, marginBottom: '6px' }}>
+              <EditableText value={principle.title} onChange={(v) => updatePrinciple(i, 'title', v)} style={{ fontSize: '15px', fontWeight: '600', color: colors.text }} />
+            </h3>
+            <p style={{ fontSize: '12px', color: colors.textSecondary, marginBottom: '8px', flex: 1, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+              <EditableText value={principle.description} onChange={(v) => updatePrinciple(i, 'description', v)} style={{ fontSize: '12px', color: colors.textSecondary }} multiline />
+            </p>
+            <div style={{ padding: '6px 10px', backgroundColor: principle.color + '12', borderRadius: '6px' }}>
+              <p style={{ fontSize: '10px', fontWeight: '600', color: principle.color, marginBottom: '2px' }}>Example</p>
+              <p style={{ fontSize: '10px', color: colors.textSecondary, margin: 0, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                <EditableText value={principle.example} onChange={(v) => updatePrinciple(i, 'example', v)} style={{ fontSize: '10px', color: colors.textSecondary }} />
+              </p>
+            </div>
+          </Card>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 // Stat Card (static)
 const StatCard = ({ value, label, suffix = '', color = colors.accent }) => (
   <div style={{ 
@@ -1011,61 +1117,13 @@ const LeadershipPrinciplesSection = () => {
         </p>
       </Card>
 
-      {/* Principles Grid — click card to open modal with full detail */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px', marginBottom: '24px' }}>
-        {principles.map((principle, i) => (
-          <div
-            key={i}
-            role="button"
-            tabIndex={0}
-            onClick={() => !isEditMode && setModalPrincipleIndex(i)}
-            onKeyDown={(e) => !isEditMode && (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), setModalPrincipleIndex(i))}
-            onMouseEnter={(e) => { if (!isEditMode) e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.boxShadow = 'none'; }}
-            style={{
-              cursor: isEditMode ? 'default' : 'pointer',
-              transition: 'box-shadow 0.2s ease',
-              outline: 'none',
-              display: 'flex',
-              flexDirection: 'column',
-              minHeight: 0
-            }}
-          >
-            <Card style={{ borderLeft: `4px solid ${principle.color}`, flex: 1, minHeight: 0, boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
-              <h3 style={{ fontSize: '18px', fontWeight: '600', color: colors.text, marginBottom: '8px' }}>
-                <EditableText
-                  value={principle.title}
-                  onChange={(v) => updatePrinciple(i, 'title', v)}
-                  style={{ fontSize: '18px', fontWeight: '600', color: colors.text }}
-                />
-              </h3>
-              <p style={{ fontSize: '14px', color: colors.textSecondary, marginBottom: '12px' }}>
-                <EditableText
-                  value={principle.description}
-                  onChange={(v) => updatePrinciple(i, 'description', v)}
-                  style={{ fontSize: '14px', color: colors.textSecondary }}
-                  multiline
-                />
-              </p>
-              <div style={{ 
-                padding: '8px 12px', 
-                backgroundColor: principle.color + '10', 
-                borderRadius: '6px',
-                marginTop: '12px'
-              }}>
-                <p style={{ fontSize: '12px', fontWeight: '600', color: principle.color, marginBottom: '4px' }}>Example:</p>
-                <p style={{ fontSize: '12px', color: colors.textSecondary, margin: 0 }}>
-                  <EditableText
-                    value={principle.example}
-                    onChange={(v) => updatePrinciple(i, 'example', v)}
-                    style={{ fontSize: '12px', color: colors.textSecondary }}
-                  />
-                </p>
-              </div>
-            </Card>
-          </div>
-        ))}
-      </div>
+      {/* Principles — D3 radial layout: 4 arc segments, cards in each */}
+      <PrinciplesRadialView
+        principles={principles}
+        updatePrinciple={updatePrinciple}
+        isEditMode={isEditMode}
+        setModalPrincipleIndex={setModalPrincipleIndex}
+      />
 
       {/* Principle detail modal — centered, blurred backdrop (portal to body so it appears on top) */}
       {modalPrincipleIndex !== null && typeof document !== 'undefined' && (() => {
@@ -1138,7 +1196,7 @@ const LeadershipPrinciplesSection = () => {
                     ×
                   </button>
                 </div>
-                <p style={{ fontFamily: appFont, fontSize: '11px', fontWeight: '600', color: colors.purple, margin: '0 0 12px', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Apply: Identify → Action → Scale → SA Efficiency</p>
+                <p style={{ fontFamily: appFont, fontSize: '11px', fontWeight: '600', color: colors.purple, margin: '0 0 12px', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Apply: Identify → Action → Scale → Share</p>
                 <div style={{ marginBottom: '16px', padding: '16px', backgroundColor: principle.color + '12', borderRadius: '10px', borderLeft: `4px solid ${principle.color}` }}>
                   <p style={{ fontFamily: appFont, fontSize: '12px', fontWeight: '600', color: principle.color, margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Framework: {content.framework}</p>
                   <p style={{ fontFamily: appFont, fontSize: '14px', fontWeight: '600', color: colors.text, margin: '0 0 8px' }}>{content.frameworkSub}</p>
@@ -1401,7 +1459,7 @@ const PartnershipsContent = ({
         <AddItemButton onClick={() => addPartnerSARulesListItem('tier3')} label="Add" />
       </Card>
     </div>
-    <h4 style={{ fontSize: '16px', fontWeight: '600', color: colors.text, marginBottom: '12px' }}>Deliverable Categories</h4>
+    <h4 style={{ fontSize: '16px', fontWeight: '600', color: colors.text, marginBottom: '12px' }}>Engagement Options</h4>
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
       <Card>
         <h5 style={{ fontSize: '13px', fontWeight: '600', color: colors.text, marginBottom: '10px' }}>Incubation</h5>
@@ -2046,40 +2104,56 @@ const GTMImpactSection = () => {
   const { isEditMode } = useContext(EditModeContext);
   const [activeTab, setActiveTab] = useState('presale');
 
+  const [presaleIntro, setPresaleIntro] = useLocalStorage('leadershipPlaybook_presaleIntro',
+    'Pre-sale impact hinges on turning technical proof into commercial conviction. The opportunities below focus on where SAs can drive more tangible outcomes: higher-converting POCs, stronger AE partnership, and credibility with technical buyers.'
+  );
   const [presaleImpact, setPresaleImpact] = useLocalStorage('leadershipPlaybook_presaleImpact', [
-    'Drive structured, high-quality POCs that convert (current POCs are generic)',
-    'Help AEs connect technical priorities to business objectives',
-    'Provide technical storytelling AEs can grow into',
-    'Build trust with developers who are highly skeptical of "sales"',
-    'Pricing scoping estimates (no EM involvement in presales)'
+    'Enable users to get hands on but guided and controlled with use cases aligned to what works best in platform.',
+    'Build out business narrative for each use case so there is tangible ROI for stakeholders.',
+    'Identify exit criteria for success.',
+    'Depth of engagement so going into implementation, there\'s less of a gap.',
+    'Build joint story tied around ROI for use cases and what outcomes were necessary to prove success.',
+    'Train each other so that both partners are learning from each other, make it so it\'s not a sliding scale of work that lands in SA or AE but rather enable each other to do aspects of both.',
+    'Build relationships and understanding on how to own the deal together.',
+    'Own the technical relationship and build trust for the platform.',
+    'Educate technical stakeholders on how to cut through the noise of the AI space today.',
+    'Be the strategy and value consultant of the platform on how it implements and scales.'
   ]);
 
+  const [postsaleIntro, setPostsaleIntro] = useLocalStorage('leadershipPlaybook_postsaleIntro',
+    'Post-sale impact is about adoption, engagement, and expansion. The opportunities below target where SAs can create measurable value: feature rollout, ongoing customer success, and discovery that fuels growth.'
+  );
   const [postsaleImpact, setPostsaleImpact] = useLocalStorage('leadershipPlaybook_postsaleImpact', [
-    'Enable feature adoption in existing customers (Rules 20%, MCPS 15%, Composer 7-8%)',
-    'FE-led enablement for existing customers',
-    'Proactive customer engagement and champion building',
-    'Increased discovery work alongside sales',
-    'Continuous account engagement beyond scheduled meetings'
+    'Enable feature adoption to create stickiness (WA, AI Studio, Connectors, KG etc)',
+    'Work with team on how to enable aspects of the platform. Even if in post-sales, if there\'s an active opportunity, get hands on to know how the customer is using it',
+    'Provide pre-built components that are great starting points to build and learn from',
+    'Proactive customer engagements on post sales opportunities for expansion',
+    'More discovery and relationship building with the current team',
+    'Have quick check-ins on accounts that don\'t have an opportunity tied to it',
+    'Continuous engagement beyond pre-sales',
+    'Cadence with post-sales to build out further relationships but also to understand how implementation is going',
+    'Think outside the box, you have context and that context can mean more use cases to learn and share'
   ]);
+
+  const [adaptationIntro, setAdaptationIntro] = useLocalStorage('leadershipPlaybook_adaptationIntro',
+    'Strategy shifts create both risk and opportunity. These areas capture how we adapt—product and motion changes, hands-on validation, and product roadmap alignment—so the team can stay aligned and drive impact as the business evolves.'
+  );
 
   const [strategyAdaptation, setStrategyAdaptation] = useLocalStorage('leadershipPlaybook_strategyAdaptation', {
     agentFirst: [
-      'Agent Builder being sunset—transition plan for existing implementations',
-      'Applications focus replacing Agent Builder work',
-      'Codeful experience within IDEs prioritized',
-      'Medical writing application example—80% pre-built for customers'
+      'Writer Agent is now the focus, let\'s learn the patterns people are using it for and how it can scale',
+      'Broader access to tools and connectors, so what is the story when interoperability is involved and how do we keep users in Writer Agent',
+      'Tech users need a place to live, as the product develops SAs can drive the Codeful usage of the platform'
     ],
     handsOnValidation: [
-      'Hour-long enablement session with Eric planned',
-      'Security certification program in Q1',
-      'More proactive customer engagement',
-      'Role evolution toward deeper security conversations'
+      'Enablement sessions, workshops, and hackathons are valuable more than ever, but we need an agenda, understanding of why and the right people in the room',
+      'Be security minded, agents with access means more data that could be sensitive is involved, we need to get ahead of these conversations',
+      'Learn the "vibe" when users are hands on, what gaps are in the product'
     ],
     productShifts: [
-      'Orchestration layer clarity needed for playbook-to-agent workflows',
-      'MCPs currently limited for complex orchestration',
-      'Ryan Harris working with product team on customer requirements',
-      'Writer Agent token pricing significantly more expensive—credit system discussion'
+      'Regular cadence with product on updates and roadmaps, we need a narrative proactively, not reactively',
+      'MCP, A2A and our perspective there',
+      'Internal extracurriculars can stress test the capabilities of the platform outside of demos'
     ]
   });
 
@@ -2114,59 +2188,129 @@ const GTMImpactSection = () => {
       </div>
 
       {activeTab === 'presale' && (
-        <Card>
-          <h3 style={{ fontSize: '18px', fontWeight: '600', color: colors.text, marginBottom: '12px' }}>How SAs Drive Impact Pre-Sale</h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {presaleImpact.map((item, i) => (
-              <EditableListItem
-                key={i}
-                value={item}
-                onChange={(v) => {
-                  const newItems = [...presaleImpact];
-                  newItems[i] = v;
-                  setPresaleImpact(newItems);
-                }}
-                onDelete={() => setPresaleImpact(presaleImpact.filter((_, idx) => idx !== i))}
-                color={colors.accent}
-              />
-            ))}
+        <>
+          <Card style={{ marginBottom: '24px', backgroundColor: colors.accent + '08', borderLeft: `4px solid ${colors.accent}` }}>
+            <p style={{ fontSize: '14px', color: colors.textSecondary, margin: 0, lineHeight: 1.6 }}>
+              <EditableText value={presaleIntro} onChange={setPresaleIntro} style={{ fontSize: '14px', color: colors.textSecondary }} multiline />
+            </p>
+          </Card>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
+            <Card style={{ borderTop: `4px solid ${colors.accent}` }}>
+              <h4 style={{ fontSize: '14px', fontWeight: '600', color: colors.accent, marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>POC & conversion</h4>
+              <p style={{ fontSize: '12px', color: colors.textMuted, marginBottom: '12px', lineHeight: 1.5 }}>Opportunity: Turn technical proof into won deals.</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {(presaleImpact.slice(0, 4)).map((item, j) => {
+                  const i = j;
+                  return (
+                    <EditableListItem key={i} value={item} onChange={(v) => { const n = [...presaleImpact]; n[i] = v; setPresaleImpact(n); }} onDelete={() => setPresaleImpact(presaleImpact.filter((_, idx) => idx !== i))} color={colors.accent} />
+                  );
+                })}
+              </div>
+            </Card>
+            <Card style={{ borderTop: `4px solid ${colors.purple}` }}>
+              <h4 style={{ fontSize: '14px', fontWeight: '600', color: colors.purple, marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>AE partnership & storytelling</h4>
+              <p style={{ fontSize: '12px', color: colors.textMuted, marginBottom: '12px', lineHeight: 1.5 }}>Opportunity: Align technical narrative with commercial motion.</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {(presaleImpact.slice(4, 7)).map((item, j) => {
+                  const i = j + 4;
+                  return (
+                    <EditableListItem key={i} value={item} onChange={(v) => { const n = [...presaleImpact]; n[i] = v; setPresaleImpact(n); }} onDelete={() => setPresaleImpact(presaleImpact.filter((_, idx) => idx !== i))} color={colors.purple} />
+                  );
+                })}
+              </div>
+            </Card>
+            <Card style={{ borderTop: `4px solid ${colors.success}` }}>
+              <h4 style={{ fontSize: '14px', fontWeight: '600', color: colors.success, marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Technical credibility & scope</h4>
+              <p style={{ fontSize: '12px', color: colors.textMuted, marginBottom: '12px', lineHeight: 1.5 }}>Opportunity: Own technical trust and scoping without bottleneck.</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {(presaleImpact.slice(7)).map((item, j) => {
+                  const i = j + 7;
+                  return (
+                    <EditableListItem key={i} value={item} onChange={(v) => { const n = [...presaleImpact]; n[i] = v; setPresaleImpact(n); }} onDelete={() => setPresaleImpact(presaleImpact.filter((_, idx) => idx !== i))} color={colors.success} />
+                  );
+                })}
+              </div>
+            </Card>
           </div>
-          <AddItemButton onClick={() => setPresaleImpact([...presaleImpact, 'New item - click to edit'])} label="Add impact" />
-        </Card>
+          <div style={{ marginTop: '16px' }}>
+            <AddItemButton onClick={() => setPresaleImpact([...presaleImpact, 'New item - click to edit'])} label="Add impact" />
+          </div>
+        </>
       )}
 
       {activeTab === 'postsale' && (
-        <Card>
-          <h3 style={{ fontSize: '18px', fontWeight: '600', color: colors.text, marginBottom: '12px' }}>How SAs Drive Impact Post-Sale</h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {postsaleImpact.map((item, i) => (
-              <EditableListItem
-                key={i}
-                value={item}
-                onChange={(v) => {
-                  const newItems = [...postsaleImpact];
-                  newItems[i] = v;
-                  setPostsaleImpact(newItems);
-                }}
-                onDelete={() => setPostsaleImpact(postsaleImpact.filter((_, idx) => idx !== i))}
-                color={colors.success}
-              />
-            ))}
+        <>
+          <Card style={{ marginBottom: '24px', backgroundColor: colors.success + '08', borderLeft: `4px solid ${colors.success}` }}>
+            <p style={{ fontSize: '14px', color: colors.textSecondary, margin: 0, lineHeight: 1.6 }}>
+              <EditableText value={postsaleIntro} onChange={setPostsaleIntro} style={{ fontSize: '14px', color: colors.textSecondary }} multiline />
+            </p>
+          </Card>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
+            <Card style={{ borderTop: `4px solid ${colors.success}` }}>
+              <h4 style={{ fontSize: '14px', fontWeight: '600', color: colors.success, marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Feature adoption</h4>
+              <p style={{ fontSize: '12px', color: colors.textMuted, marginBottom: '12px', lineHeight: 1.5 }}>Opportunity: Move the needle on the product and adoption.</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {(postsaleImpact.slice(0, 3)).map((item, j) => {
+                  const i = j;
+                  return (
+                    <EditableListItem key={i} value={item} onChange={(v) => { const n = [...postsaleImpact]; n[i] = v; setPostsaleImpact(n); }} onDelete={() => setPostsaleImpact(postsaleImpact.filter((_, idx) => idx !== i))} color={colors.success} />
+                  );
+                })}
+              </div>
+            </Card>
+            <Card style={{ borderTop: `4px solid ${colors.purple}` }}>
+              <h4 style={{ fontSize: '14px', fontWeight: '600', color: colors.purple, marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Proactive engagement</h4>
+              <p style={{ fontSize: '12px', color: colors.textMuted, marginBottom: '12px', lineHeight: 1.5 }}>Opportunity: Champion building and ongoing success beyond handoff.</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {(postsaleImpact.slice(3, 6)).map((item, j) => {
+                  const i = j + 3;
+                  return (
+                    <EditableListItem key={i} value={item} onChange={(v) => { const n = [...postsaleImpact]; n[i] = v; setPostsaleImpact(n); }} onDelete={() => setPostsaleImpact(postsaleImpact.filter((_, idx) => idx !== i))} color={colors.purple} />
+                  );
+                })}
+              </div>
+            </Card>
+            <Card style={{ borderTop: `4px solid ${colors.accent}` }}>
+              <h4 style={{ fontSize: '14px', fontWeight: '600', color: colors.accent, marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Expansion & discovery</h4>
+              <p style={{ fontSize: '12px', color: colors.textMuted, marginBottom: '12px', lineHeight: 1.5 }}>Opportunity: Continuous engagement and discovery that fuels growth.</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {(postsaleImpact.slice(6)).map((item, j) => {
+                  const i = j + 6;
+                  return (
+                    <EditableListItem key={i} value={item} onChange={(v) => { const n = [...postsaleImpact]; n[i] = v; setPostsaleImpact(n); }} onDelete={() => setPostsaleImpact(postsaleImpact.filter((_, idx) => idx !== i))} color={colors.accent} />
+                  );
+                })}
+              </div>
+            </Card>
           </div>
-          <AddItemButton onClick={() => setPostsaleImpact([...postsaleImpact, 'New item - click to edit'])} label="Add impact" />
-        </Card>
+          <div style={{ marginTop: '16px' }}>
+            <AddItemButton onClick={() => setPostsaleImpact([...postsaleImpact, 'New item - click to edit'])} label="Add impact" />
+          </div>
+        </>
       )}
 
       {activeTab === 'adaptation' && (
         <div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '24px' }}>
+          <Card style={{ marginBottom: '24px', backgroundColor: colors.purple + '08', borderLeft: `4px solid ${colors.purple}` }}>
+            <p style={{ fontSize: '14px', color: colors.textSecondary, margin: 0, lineHeight: 1.6 }}>
+              <EditableText value={adaptationIntro} onChange={setAdaptationIntro} style={{ fontSize: '14px', color: colors.textSecondary }} multiline />
+            </p>
+          </Card>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '20px', marginBottom: '24px' }}>
             {Object.entries(strategyAdaptation).map(([key, items], idx) => {
               const colors_map = [colors.accent, colors.purple, colors.warning];
+              const opportunityLabels = {
+                agentFirst: 'Product and motion shifts (e.g. Agent Builder → Applications)',
+                handsOnValidation: 'Hands-on validation and enablement (security, engagement)',
+                productShifts: 'Product roadmap and orchestration alignment'
+              };
+              const opportunity = opportunityLabels[key] || key.replace(/([A-Z])/g, ' $1').trim();
               return (
                 <Card key={key} style={{ borderLeft: `4px solid ${colors_map[idx]}` }}>
-                  <h4 style={{ fontSize: '14px', fontWeight: '600', color: colors.text, marginBottom: '12px', textTransform: 'capitalize' }}>
+                  <h4 style={{ fontSize: '14px', fontWeight: '600', color: colors_map[idx], marginBottom: '6px', textTransform: 'capitalize' }}>
                     {key.replace(/([A-Z])/g, ' $1').trim()}
                   </h4>
+                  <p style={{ fontSize: '12px', color: colors.textMuted, marginBottom: '12px', lineHeight: 1.5 }}>Opportunity: {opportunity}</p>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {items.map((item, i) => (
                       <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
@@ -2298,8 +2442,6 @@ const OperatingCoachingSection = () => {
     continuousLearning: [
       'Systematic content sharing—weekly demo highlights by industry',
       'Marketing/enablement to provide weekly industry-specific content',
-      'Security certification program in Q1',
-      'Hour-long enablement session with Eric on security conversations',
       'Document/plan team asks constantly'
     ]
   });
@@ -2948,7 +3090,12 @@ const First30DaysSection = () => {
   const [first30PhaseSummary, setFirst30PhaseSummary] = useLocalStorage('leadershipPlaybook_first30PhaseSummary', {
     days: 'Days 1-30',
     title: 'Discovery, Design & Launch',
-    goal: 'Establish baseline (team structure, key activities, competitive positioning, capacity, retention), design pilots and prescriptive assets, and operationalize rhythms—so Day 30 outcomes are measurable and repeatable.'
+    goal: 'Establish baseline for the SA Strat West team, design pilots, and operationalize rhythms so Day 30 outcomes are measurable and repeatable.',
+    pillars: [
+      'Baseline: Strat West team structure, key activities, capacity, retention',
+      'Pilots & prescriptive assets (differentiation, capacity, replication)',
+      'Rhythms: accountability and replication in motion'
+    ]
   });
 
   const defaultPhases30 = [
@@ -2956,68 +3103,68 @@ const First30DaysSection = () => {
       days: 'Days 1-10',
       title: 'Discovery & Baseline',
       color: colors.accent,
-      goal: 'Map current state across team structure, key activities of value, competitive positioning, capacity, and retention—establish baseline for action',
+      goal: 'Map current state across Strat West team structure, key activities of value, competitive positioning, capacity, and retention—establish baseline for action',
       priorities: [
-        'Partner SA: Audit all partner-sourced deals; interview 3-5 regional SAs on friction points; document "telephone game" workflow; pull partner vs. direct deal velocity data',
-        'Partner Accountability: Create Partner Engagement Scorecard—joint customers identified, discovery calls scheduled, pipeline generated, deals closed; define Tier 1/2/3 expectations (e.g. Tier 1: 2 joint intros/month, quarterly pipeline target)',
-        'Differentiation: Conduct 5 competitive-learning interviews (where "just use ChatGPT" influenced outcomes); audit sales collateral for differentiation opportunities; build competitive matrix: Writer vs. ChatGPT Enterprise vs. Claude vs. Gemini (governance, brand voice, integrations, workflow depth)',
-        'Capacity: Build SA Capacity Dashboard—deal count per SA, weighted pipeline, deal stage distribution, time-to-close; set yellow (18+ deals or 120% avg pipeline) and red (21+ or 140%) thresholds',
-        'Retention: Confidential 1:1s with each West Coast SA—what would make you stay 2 years? What energizes vs. drains? Map retention focus and career aspirations to growth opportunities',
-        'General SA: Shadow or interview top-performing SAs to identify which activities drive wins (discovery, demos, follow-up); review win/loss and deal-velocity data; document 3–5 repeatable patterns and draft "how the best SAs work" for playbook'
+        'Deal flow: Audit deal sources and velocity; interview 3–5 Strat West SAs on friction points; document workflow and handoffs; pull deal-velocity data',
+        'Accountability: Create Strat West engagement scorecard—discovery calls, pipeline, deals closed; define expectations and success criteria',
+        'Differentiation: Conduct 5 competitive-learning interviews (where "just use ChatGPT" influenced outcomes); audit sales collateral; build competitive matrix: Writer vs. ChatGPT Enterprise vs. Claude vs. Gemini',
+        'Capacity: Build SA Capacity Dashboard for Strat West—deal count per SA, weighted pipeline, deal stage distribution; set yellow (18+ deals or 120% avg pipeline) and red (21+ or 140%) thresholds',
+        'Retention: Confidential 1:1s with each Strat West SA—what would make you stay 2 years? What energizes vs. drains? Map retention focus and career aspirations',
+        'Replication: Shadow or interview top-performing Strat West SAs; review win/loss and deal-velocity data; document 3–5 repeatable patterns and draft "how the best SAs work" for playbook'
       ],
       risks: [
         'Trying to address everything at once without baseline clarity',
-        'SAs or partners not surfacing key themes in interviews',
+        'Strat West SAs not surfacing key themes in interviews',
         'Dashboard built on incomplete or stale data',
         'Overpromising timelines before discovery complete'
       ],
       assumptions: [
         'Leadership supports 30-day discovery before major process changes',
-        'Sales/partner data available in Salesforce or equivalent',
-        'Team willing to participate in 1:1s and interviews',
+        'Sales data available in Salesforce or equivalent',
+        'Strat West team willing to participate in 1:1s and interviews',
         'Current structure stable enough to run parallel discovery'
       ],
       keyDeliverables: [
-        'Partner deal audit and workflow documentation',
-        'Partner Engagement Scorecard and tier definitions',
+        'Deal flow and workflow documentation',
+        'Strat West engagement scorecard and expectations',
         'Competitive matrix and lost-deal summary',
-        'SA Capacity Dashboard (yellow/red thresholds)',
+        'SA Capacity Dashboard for Strat West (yellow/red thresholds)',
         'Retention 1:1 summary and retention-focus map',
-        'General SA: Key activities of value summary; 3–5 repeatable patterns documented'
+        'Key activities of value summary; 3–5 repeatable patterns documented'
       ]
     },
     {
       days: 'Days 11-20',
       title: 'Pilot Design & Build',
       color: colors.purple,
-      goal: 'Design pilots and prescriptive assets (partner and general SA), differentiation playbook, capacity rules, and retention programs—actionable by Day 30',
+      goal: 'Design pilots and prescriptive assets, differentiation playbook, capacity rules, and retention programs—actionable by Day 30',
       priorities: [
-        'Partner SA: Select West Coast for 60-day integration pilot; redefine Partner SA as "Partner Specialist" overlay in regional pod; create shared Slack/deal rooms (partner + regional SAs); document RACI—Partner Specialist owns partner relationship, Regional SA owns technical solution and customer relationship',
-        'Partner Accountability: Build Partner Pitch Kits for top 5 use cases (FS: KYC, research, regulatory docs; Healthcare: clinical docs, prior auth; Manufacturing: tech docs, quality reporting)—each with 2-min pitch, proof points, discovery questions, demo script; create "Why Writer vs. DIY" one-pager for partner sellers',
-        'Differentiation: Develop Objection Handling Playbook—talk tracks for "just use ChatGPT," "we\'ll build ourselves," "Gemini free with Workspace"; create 3 vertical "Why Writer Wins" narratives (FS, Technology, Healthcare); document TCO/time-to-value angles',
-        'Capacity: Audit SA-to-AE mappings vs. actual deal flow; identify mismatches (high-volume AEs + loaded SAs); propose rebalancing by geography, vertical, deal velocity; draft Deal Assignment Rules of Engagement and escalation path when capacity constrained',
-        'Retention: Define Lighthouse Deal program—2-3 strategic accounts/quarter with executive touchpoints; design SA Innovation Sprint (2-day net-new build, present to leadership); implement Executive Shadow (top performers in 2-3 exec customer meetings/quarter)',
-        'General SA: Turn key activities into templates or playbooks (discovery, demo, exit gates, handoffs); define replication cadence (enablement, coaching, content); pilot with 1–2 SAs and iterate'
+        'Pilot: Select region or segment for 60-day pilot; document roles and handoffs (who owns solution, who owns customer relationship); create shared deal rooms and channels',
+        'Enablement: Build pitch kits for top 5 use cases—2-min pitch, proof points, discovery questions, demo script; create "Why Writer vs. DIY" one-pager',
+        'Differentiation: Develop Objection Handling Playbook—talk tracks for "just use ChatGPT," "we\'ll build ourselves," "Gemini free with Workspace"; create 3 vertical "Why Writer Wins" narratives; document TCO/time-to-value angles',
+        'Capacity: Audit SA-to-AE mappings vs. actual deal flow; identify mismatches; propose rebalancing by geography, vertical, deal velocity; draft Deal Assignment Rules and escalation path when capacity constrained',
+        'Retention: Define Lighthouse Deal program—2–3 strategic accounts/quarter with executive touchpoints; design SA Innovation Sprint (2-day net-new build, present to leadership); implement Executive Shadow',
+        'Replication: Turn key activities into templates or playbooks (discovery, demo, exit gates, handoffs); define replication cadence for Strat West (enablement, coaching, content); pilot with 1–2 SAs and iterate'
       ],
       risks: [
         'Pilot design scope—opportunity to launch in 60 days',
-        'Partner kits—opportunity to tailor so partners adopt them',
+        'Pitch kits—opportunity to tailor for adoption',
         'Objection playbook not grounded in real deal language',
         'Rebalancing triggers political pushback'
       ],
       assumptions: [
-        'West Coast is viable pilot region; partner and regional SA buy-in',
+        'Pilot region or segment has buy-in',
         'Content/Enablement can support pitch kits and playbook',
         'AE alignment changes can be socialized with Sales leadership',
         'Executive Shadow and Lighthouse criteria are agreed'
       ],
       keyDeliverables: [
-        'West Coast pilot plan with RACI and shared channels',
-        'Partner Pitch Kits (top 5 use cases) and Why Writer vs. DIY one-pager',
+        'Pilot plan with roles and shared channels',
+        'Pitch kits (top 5 use cases) and Why Writer vs. DIY one-pager',
         'Objection Handling Playbook and vertical narratives',
-        'Deal Assignment Rules of Engagement and rebalancing proposal',
+        'Deal Assignment Rules and rebalancing proposal',
         'Lighthouse Deal and Innovation Sprint program docs',
-        'General SA: SA playbook draft (key activities); replication process outline and pilot plan'
+        'Strat West SA playbook draft (key activities); replication process outline and pilot plan'
       ]
     },
     {
@@ -3026,75 +3173,74 @@ const First30DaysSection = () => {
       color: colors.warning,
       goal: 'Launch pilots and accountability rhythms, enable SAs on differentiation and replication process, operationalize capacity and recognition—so Day 30 outcomes are measurable and repeatable',
       priorities: [
-        'Partner SA: Launch West Coast pilot with success metrics (deal velocity, customer satisfaction, SA utilization); run weekly retro; build business case for broader rollout from pilot data',
-        'Partner Accountability: Launch monthly Partner Business Reviews with scorecard; require Joint Account Planning for Tier 1 (named accounts, owner, next action, commit date); define escalation path—2 consecutive months below minimums triggers exec-to-exec conversation; build Salesforce dashboard for partner engagement visible to leadership',
-        'Differentiation: Run 90-minute SA enablement on Objection Handling Playbook; start "Win Story of the Week" in Slack; create Seismic/Highspot collection for competitive situations; establish quarterly competitive intel refresh',
-        'Capacity: Add weekly 15-min capacity check-in to team standup (dashboard review, flag imbalances); document flex-capacity protocol when SA hits red threshold (redistribution steps, AE communication); define strategic-deal criteria and how it affects capacity calculation',
-        'Retention: Launch monthly Impact Spotlight (SA presents innovative solution to team + leadership); document path-to-Lead (deals closed, enablement contribution, peer feedback, lighthouse participation); schedule quarterly career development conversations (separate from performance reviews)',
-        'General SA: Roll out playbook and replication cadence (enablement, coaching checkpoints, content); build feedback loop so wins and gaps continuously update the process; establish "key activities of value" as a standing team topic'
+        'Pilot: Launch pilot with success metrics (deal velocity, customer satisfaction, SA utilization); run weekly retro; build business case for broader rollout from pilot data',
+        'Accountability: Launch monthly Strat West team business reviews with scorecard; require key account planning (named accounts, owner, next action, commit date); define escalation path when below minimums; build Salesforce dashboard for Strat West engagement visible to leadership',
+        'Differentiation: Run 90-minute Strat West SA enablement on Objection Handling Playbook; start "Win Story of the Week" in Slack; create Seismic/Highspot collection for competitive situations; establish quarterly competitive intel refresh',
+        'Capacity: Add weekly 15-min capacity check-in to Strat West team standup (dashboard review, flag imbalances); document flex-capacity protocol when SA hits red threshold (redistribution steps, AE communication); define strategic-deal criteria',
+        'Retention: Launch monthly Impact Spotlight (Strat West SA presents innovative solution to team + leadership); document path-to-Lead (deals closed, enablement contribution, peer feedback, lighthouse participation); schedule quarterly career development conversations (separate from performance reviews)',
+        'Replication: Roll out playbook and replication cadence for Strat West (enablement, coaching checkpoints, content); build feedback loop so wins and gaps continuously update the process; establish "key activities of value" as a standing team topic'
       ],
       risks: [
         'Pilot metrics—opportunity to track and demonstrate value',
-        'Partner reviews—opportunity to build real accountability',
+        'Reviews—opportunity to build real accountability',
         'Enablement one-and-done—no reinforcement',
         'Capacity protocol not used when pressure hits'
       ],
       assumptions: [
         'Pilot has clear success criteria and owner',
-        'Salesforce/Tableau can support partner and capacity dashboards',
+        'Salesforce/Tableau can support engagement and capacity dashboards',
         'Leadership attends Impact Spotlight or equivalent',
         'Career development conversations are protected time'
       ],
       keyDeliverables: [
         'Pilot launched with metrics and weekly retro cadence',
-        'Partner Business Review and Joint Account Planning in motion; partner dashboard live',
-        'SA differentiation enablement complete; competitive content in Seismic/Highspot',
+        'Strat West team business review and account planning in motion; engagement dashboard live',
+        'Strat West SA differentiation enablement complete; competitive content in Seismic/Highspot',
         'Weekly capacity check-in and flex-capacity protocol documented',
         'Impact Spotlight and path-to-Lead doc live; career conversations scheduled',
-        'General SA: Playbook in use; replication cadence and feedback loop established'
+        'Playbook in use; replication cadence and feedback loop established for Strat West'
       ]
     }
   ];
 
   const [phases, setPhases] = useLocalStorage('leadershipPlaybook_phases', defaultPhases30);
 
-  // One-time migration: if saved phases still have old partner-SA-specific goals, update to generic goals
+  // One-time migration: if saved phases still have old partner-SA-specific goals, update to SA-general goals
   useEffect(() => {
     setPhases(prev => {
       if (!Array.isArray(prev) || prev.length < 3) return prev;
       if (!prev[0]?.goal?.includes('Partner SA integration')) return prev;
       const newGoals = [
         'Map current state across team structure, key activities of value, competitive positioning, capacity, and retention—establish baseline for action',
-        'Design pilots and prescriptive assets (partner and general SA), differentiation playbook, capacity rules, and retention programs—actionable by Day 30',
+        'Design pilots and prescriptive assets, differentiation playbook, capacity rules, and retention programs—actionable by Day 30',
         'Launch pilots and accountability rhythms, enable SAs on differentiation and replication process, operationalize capacity and recognition—so Day 30 outcomes are measurable and repeatable'
       ];
       return prev.map((p, i) => ({ ...p, goal: newGoals[i] ?? p.goal }));
     });
   }, []);
 
-  const [keyOutcomesTitle, setKeyOutcomesTitle] = useLocalStorage('leadershipPlaybook_keyOutcomesTitle', 'What I Aim to Have in Place After 30 Days');
+  const [keyOutcomesTitle, setKeyOutcomesTitle] = useLocalStorage('leadershipPlaybook_keyOutcomesTitle', 'Key Actions');
   const [keyOutcomes, setKeyOutcomes] = useLocalStorage('leadershipPlaybook_keyOutcomes', [
-    'Partner SA: West Coast integration pilot launched with clear RACI and success metrics',
-    'Partner Accountability: Scorecard and monthly Partner Business Reviews; Tier 1 joint account plans in place',
-    'Differentiation: Objection Handling Playbook enabled; Win Story of the Week and competitive content live',
-    'Capacity: SA Capacity Dashboard with yellow/red thresholds; weekly check-in and flex-capacity protocol',
-    'Retention: Lighthouse Deal program and Impact Spotlight launched; path-to-Lead and career conversations scheduled',
-    'General SA: Key activities of value identified and documented; process to replicate in place (playbook, enablement, cadence)'
+    'Audit deal flow & Strat West SA capacity; build Capacity Dashboard with yellow/red thresholds',
+    'Launch pilot with success metrics; document Strat West engagement and accountability',
+    'Deliver Objection Handling Playbook and differentiation enablement; Win Story of the Week',
+    'Launch Impact Spotlight and path-to-Lead; schedule career conversations',
+    'Document key activities of value and replication playbook for Strat West; establish enablement cadence'
   ]);
 
   const [generalSADescription, setGeneralSADescription] = useLocalStorage('leadershipPlaybook_generalSADescription',
-    'Alongside Partner SA work, the first 30 days should establish a baseline for all SAs: identify which activities drive the most value (wins, velocity, customer outcomes) and create repeatable process so the team can scale what works instead of relying on hero effort.'
+    'The first 30 days should establish a baseline for the SA Strat West team: identify which activities drive the most value (wins, velocity, customer outcomes) and create repeatable process so the team can scale what works instead of relying on hero effort.'
   );
   const [generalSAIdentifying, setGeneralSAIdentifying] = useLocalStorage('leadershipPlaybook_generalSAIdentifying', [
-    'Shadow or interview top performers to pinpoint what they do that drives wins (discovery, demos, follow-up, handoffs)',
+    'Shadow or interview top Strat West performers to pinpoint what they do that drives wins (discovery, demos, follow-up, handoffs)',
     'Review win/loss and deal-velocity data to tie activities to outcomes',
     'Document 3–5 repeatable patterns (e.g. discovery questions that unlock expansion, demo flows that convert)',
-    'Capture "how the best SAs work" in a draft that can become a playbook'
+    'Capture "how the best SAs work" in a draft that can become the Strat West playbook'
   ]);
   const [generalSAReplication, setGeneralSAReplication] = useLocalStorage('leadershipPlaybook_generalSAReplication', [
     'Turn key activities into templates or playbooks (discovery, demo, exit gates, handoffs)',
-    'Define a replication cadence: enablement sessions, coaching checkpoints, content in Seismic/Highspot',
-    'Pilot with 1–2 SAs and iterate before rolling out to the full team',
+    'Define a replication cadence for Strat West: enablement sessions, coaching checkpoints, content in Seismic/Highspot',
+    'Pilot with 1–2 Strat West SAs and iterate before rolling out to the full team',
     'Build feedback loop so wins and gaps continuously update the process'
   ]);
 
@@ -3103,28 +3249,36 @@ const First30DaysSection = () => {
       days: 'Days 31–60',
       title: 'Scale & Refine',
       color: colors.success,
-      goal: 'Scale the West Coast pilot, refine playbooks and capacity protocol, deepen partner accountability and retention programs—so Day 60 outcomes are measurable and repeatable.',
+      goal: 'Scale pilot, refine playbooks and capacity, deepen Strat West team accountability and retention.',
+      pillars: [
+        'Pilot retros and business case for broader rollout',
+        'Monthly Strat West business reviews and account planning standard',
+        'Capacity and retention rhythms embedded'
+      ],
       keyActivities: [
-        'Partner SA: Run pilot with weekly retros; gather deal velocity, satisfaction, utilization data; build business case for broader rollout; document RACI learnings and shared-channel best practices',
-        'Partner Accountability: Monthly Partner Business Reviews with scorecard; Joint Account Planning for Tier 1; escalation path (2 months below minimums → exec-to-exec); partner dashboard visible to leadership',
-        'Differentiation: Second round of SA enablement on Objection Playbook; Win Story of the Week in Slack; competitive content in Seismic/Highspot; quarterly competitive intel refresh',
-        'Capacity: Weekly 15-min capacity check-in in standup; flex-capacity protocol when SA hits red (redistribution, AE communication); strategic-deal criteria documented',
-        'Retention: Monthly Impact Spotlight; path-to-Lead doc (deals, enablement, lighthouse); quarterly career conversations (separate from performance); Lighthouse Deal and Executive Shadow in motion',
-        'General SA: Playbook in use; replication cadence (enablement, coaching, content); feedback loop so wins and gaps update the process; "key activities of value" as standing team topic'
+        'Run pilot weekly retros; document learnings and build rollout case',
+        'Monthly Strat West team reviews with scorecard; key account planning; escalation path live',
+        'Second round Objection Playbook enablement; Win Story of the Week and competitive content',
+        'Weekly capacity check-in and flex-capacity protocol; strategic-deal criteria set',
+        'Impact Spotlight monthly; path-to-Lead and career conversations in motion'
       ]
     },
     {
       days: 'Days 61–90',
       title: 'Broaden & Embed',
       color: colors.info,
-      goal: 'Broaden pilot rollout (if validated), embed rhythms and playbooks, and lock in talent and culture—so Day 90 sets the baseline for ongoing execution.',
+      goal: 'Broaden rollout, embed rhythms and playbooks, lock in Strat West talent and culture.',
+      pillars: [
+        'Pilot rollout (if validated); Strat West team model refined',
+        'Scorecard and reviews embedded; pipeline and accountability visible',
+        'Playbooks and retention programs part of Strat West team rhythm'
+      ],
       keyActivities: [
-        'Partner SA: Broader rollout (if pilot success); consistent RACI and shared channels; Partner Specialist model refined; deal velocity and satisfaction tracked',
-        'Partner Accountability: Partner Engagement Scorecard and Tier 1/2/3 expectations embedded; monthly PBRs and Joint Account Planning standard; partner pipeline and close data in Salesforce',
-        'Differentiation: Objection Handling Playbook and vertical narratives in every deal; Win Story of the Week and competitive content refreshed; SA confidence on "Why Writer Wins"',
-        'Capacity: Capacity dashboard and weekly check-in standard; flex-capacity protocol used when needed; rebalancing by geo/vertical/velocity as needed',
-        'Retention: Impact Spotlight and path-to-Lead live; career conversations quarterly; Lighthouse Deal and Executive Shadow criteria refined; retention focus and aspirations tracked',
-        'General SA: Key activities of value and replication process embedded; playbook and enablement cadence part of team rhythm; continuous feedback loop'
+        'Broader rollout; shared channels and handoffs consistent; velocity and satisfaction tracked',
+        'Strat West engagement scorecard and expectations embedded; reviews and planning standard',
+        'Objection Playbook in every deal; Strat West SA confidence on Why Writer Wins',
+        'Capacity dashboard and flex protocol standard; rebalancing as needed',
+        'Impact Spotlight and path-to-Lead live; career conversations and retention tracked'
       ]
     }
   ];
@@ -3156,6 +3310,15 @@ const First30DaysSection = () => {
   const addPhase60_90Activity = (phaseIndex) => {
     setPhases60_90(prev => prev.map((p, i) => i === phaseIndex ? { ...p, keyActivities: [...p.keyActivities, 'New item - click to edit'] } : p));
   };
+  const updatePhase60_90Pillar = (phaseIndex, pillarIndex, value) => {
+    setPhases60_90(prev => prev.map((p, i) => i === phaseIndex ? { ...p, pillars: (p.pillars || []).map((pp, j) => j === pillarIndex ? value : pp) } : p));
+  };
+  const addPhase60_90Pillar = (phaseIndex) => {
+    setPhases60_90(prev => prev.map((p, i) => i === phaseIndex ? { ...p, pillars: [...(p.pillars || []), 'New pillar - click to edit'] } : p));
+  };
+  const deletePhase60_90Pillar = (phaseIndex, pillarIndex) => {
+    setPhases60_90(prev => prev.map((p, i) => i === phaseIndex ? { ...p, pillars: (p.pillars || []).filter((_, j) => j !== pillarIndex) } : p));
+  };
 
   // 30-60-90 timeline phases (for timeline + cards in detail view)
   const timelinePhases306090 = [
@@ -3165,6 +3328,9 @@ const First30DaysSection = () => {
   ];
 
   const updateFirst30PhaseSummary = (field, value) => setFirst30PhaseSummary(prev => ({ ...prev, [field]: value }));
+  const updateFirst30Pillar = (i, v) => setFirst30PhaseSummary(prev => ({ ...prev, pillars: (prev.pillars || []).map((p, j) => j === i ? v : p) }));
+  const addFirst30Pillar = () => setFirst30PhaseSummary(prev => ({ ...prev, pillars: [...(prev.pillars || []), 'New pillar - click to edit'] }));
+  const deleteFirst30Pillar = (i) => setFirst30PhaseSummary(prev => ({ ...prev, pillars: (prev.pillars || []).filter((_, j) => j !== i) }));
 
   // Update functions for phase data (kept for any legacy use; primary editing now via updatePhaseByIndex etc.)
   const updatePhaseField = (field, value) => {
@@ -3219,87 +3385,98 @@ const First30DaysSection = () => {
         />
       </Card>
 
-      {/* Card for selected segment only (activePhase 0 = Days 1-30, 1 = 31-60, 2 = 61-90) */}
+      {/* Detail card for selected segment: Pillars + Key Actions only */}
       {activePhase === 0 && (
         <Card style={{ marginBottom: '24px', padding: '24px', borderLeft: `4px solid ${colors.accent}` }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+          <div style={{ marginBottom: '16px' }}>
+            <div style={{ fontSize: '12px', fontWeight: '700', color: colors.accent, letterSpacing: '0.04em', marginBottom: '4px' }}>{first30PhaseSummary.days}</div>
+            <EditableText value={first30PhaseSummary.title} onChange={(v) => updateFirst30PhaseSummary('title', v)} style={{ fontSize: '18px', fontWeight: '600', color: colors.text, margin: 0 }} />
+            <EditableText value={first30PhaseSummary.goal} onChange={(v) => updateFirst30PhaseSummary('goal', v)} style={{ fontSize: '13px', color: colors.textSecondary, marginTop: '8px', display: 'block' }} />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
             <div>
-              <div style={{ fontSize: '12px', fontWeight: '700', color: colors.accent, letterSpacing: '0.04em', marginBottom: '4px' }}>{first30PhaseSummary.days}</div>
-              <EditableText value={first30PhaseSummary.title} onChange={(v) => updateFirst30PhaseSummary('title', v)} style={{ fontSize: '18px', fontWeight: '600', color: colors.text, margin: 0 }} />
-            </div>
-            <EditableText value={first30PhaseSummary.goal} onChange={(v) => updateFirst30PhaseSummary('goal', v)} style={{ fontSize: '13px', fontWeight: '500', color: colors.accent, backgroundColor: colors.accent + '12', padding: '8px 14px', borderRadius: '8px', maxWidth: '100%', flex: '1 1 280px' }} multiline />
-          </div>
-          <div style={{ fontSize: '13px', fontWeight: '600', color: colors.textMuted, marginBottom: '12px' }}>Breakdown: Days 1-10, 11-20, 21-30</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px', marginBottom: '24px' }}>
-            {phases.map((phase, idx) => (
-              <div key={idx} style={{ padding: '16px', borderRadius: '12px', border: `2px solid ${phase.color}30`, backgroundColor: phase.color + '08' }}>
-                <div style={{ fontSize: '12px', fontWeight: '700', color: phase.color, marginBottom: '4px', letterSpacing: '0.04em' }}>{phase.days}</div>
-                <EditableText value={phase.title} onChange={(v) => updatePhaseByIndex(idx, 'title', v)} style={{ fontSize: '14px', fontWeight: '600', color: colors.text, marginBottom: '8px' }} />
-                <EditableText value={phase.goal} onChange={(v) => updatePhaseByIndex(idx, 'goal', v)} style={{ fontSize: '11px', color: colors.textSecondary, lineHeight: 1.5, marginBottom: '10px' }} multiline />
-                <div style={{ fontSize: '11px', fontWeight: '600', color: colors.textMuted, marginBottom: '6px' }}>Key Deliverables</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  {(phase.keyDeliverables || []).map((item, i) => (
-                    <EditableListItem key={i} value={item} onChange={(v) => updatePhaseListItemByIndex(idx, 'keyDeliverables', i, v)} onDelete={() => deletePhaseListItemByIndex(idx, 'keyDeliverables', i)} color={phase.color} />
-                  ))}
-                  <AddItemButton onClick={() => addPhaseListItemByIndex(idx, 'keyDeliverables')} label="Add" />
-                </div>
+              <div style={{ fontSize: '13px', fontWeight: '600', color: colors.textMuted, marginBottom: '10px' }}>Key pillars</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {(first30PhaseSummary.pillars || []).map((p, i) => (
+                  <EditableListItem key={i} value={p} onChange={(v) => updateFirst30Pillar(i, v)} onDelete={() => deleteFirst30Pillar(i)} color={colors.accent} />
+                ))}
+                <AddItemButton onClick={addFirst30Pillar} label="Add pillar" />
               </div>
-            ))}
-          </div>
-          <div style={{ paddingTop: '16px', borderTop: `1px solid ${colors.border}` }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-              <div style={{ width: '24px', height: '24px', borderRadius: '6px', backgroundColor: colors.success + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px' }}>✅</div>
-              <EditableText value={keyOutcomesTitle} onChange={(v) => setKeyOutcomesTitle(v)} style={{ fontSize: '15px', fontWeight: '600', color: colors.success, margin: 0 }} />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-              {keyOutcomes.map((item, i) => (
-                <EditableListItem key={i} value={item} onChange={(v) => { const n = [...keyOutcomes]; n[i] = v; setKeyOutcomes(n); }} onDelete={() => setKeyOutcomes(keyOutcomes.filter((_, idx) => idx !== i))} color={colors.success} style={{ padding: '8px', backgroundColor: 'white', borderRadius: '6px' }} />
-              ))}
+            <div>
+              <EditableText value={keyOutcomesTitle} onChange={(v) => setKeyOutcomesTitle(v)} style={{ fontSize: '13px', fontWeight: '600', color: colors.textMuted, marginBottom: '10px', display: 'block' }} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {keyOutcomes.map((item, i) => (
+                  <EditableListItem key={i} value={item} onChange={(v) => { const n = [...keyOutcomes]; n[i] = v; setKeyOutcomes(n); }} onDelete={() => setKeyOutcomes(keyOutcomes.filter((_, idx) => idx !== i))} color={colors.accent} />
+                ))}
+                <AddItemButton onClick={() => setKeyOutcomes([...keyOutcomes, 'New action - click to edit'])} label="Add action" />
+              </div>
             </div>
-            <AddItemButton onClick={() => setKeyOutcomes([...keyOutcomes, 'New outcome - click to edit'])} label="Add outcome" />
           </div>
         </Card>
       )}
 
       {activePhase === 1 && phases60_90[0] && (
-        <Card style={{ marginBottom: '24px', borderLeft: `4px solid ${phases60_90[0].color}` }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
-            <div>
-              <div style={{ fontSize: '12px', fontWeight: '700', color: phases60_90[0].color, letterSpacing: '0.04em', marginBottom: '4px' }}>{phases60_90[0].days}</div>
-              <EditableText value={phases60_90[0].title} onChange={(v) => updatePhase60_90Field(0, 'title', v)} style={{ fontSize: '18px', fontWeight: '600', color: colors.text, margin: 0 }} />
-            </div>
-            <EditableText value={phases60_90[0].goal} onChange={(v) => updatePhase60_90Field(0, 'goal', v)} style={{ fontSize: '13px', fontWeight: '500', color: phases60_90[0].color, backgroundColor: phases60_90[0].color + '12', padding: '8px 14px', borderRadius: '8px', maxWidth: '100%', flex: '1 1 280px' }} multiline />
+        <Card style={{ marginBottom: '24px', padding: '24px', borderLeft: `4px solid ${phases60_90[0].color}` }}>
+          <div style={{ marginBottom: '16px' }}>
+            <div style={{ fontSize: '12px', fontWeight: '700', color: phases60_90[0].color, letterSpacing: '0.04em', marginBottom: '4px' }}>{phases60_90[0].days}</div>
+            <EditableText value={phases60_90[0].title} onChange={(v) => updatePhase60_90Field(0, 'title', v)} style={{ fontSize: '18px', fontWeight: '600', color: colors.text, margin: 0 }} />
+            <EditableText value={phases60_90[0].goal} onChange={(v) => updatePhase60_90Field(0, 'goal', v)} style={{ fontSize: '13px', color: colors.textSecondary, marginTop: '8px', display: 'block' }} />
           </div>
-          <div style={{ fontSize: '13px', fontWeight: '600', color: colors.textMuted, marginBottom: '10px' }}>Key Activities</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {phases60_90[0].keyActivities.map((item, i) => (
-              <EditableListItem key={i} value={item} onChange={(v) => updatePhase60_90Activity(0, i, v)} onDelete={() => deletePhase60_90Activity(0, i)} color={phases60_90[0].color} style={{ padding: '10px', backgroundColor: phases60_90[0].color + '08', borderRadius: '8px', border: `1px solid ${phases60_90[0].color}20` }} />
-            ))}
-            <AddItemButton onClick={() => addPhase60_90Activity(0)} label="Add activity" />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+            <div>
+              <div style={{ fontSize: '13px', fontWeight: '600', color: colors.textMuted, marginBottom: '10px' }}>Key pillars</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {(phases60_90[0].pillars || []).map((p, i) => (
+                  <EditableListItem key={i} value={p} onChange={(v) => updatePhase60_90Pillar(0, i, v)} onDelete={() => deletePhase60_90Pillar(0, i)} color={phases60_90[0].color} />
+                ))}
+                <AddItemButton onClick={() => addPhase60_90Pillar(0)} label="Add pillar" />
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: '13px', fontWeight: '600', color: colors.textMuted, marginBottom: '10px' }}>Key actions</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {(phases60_90[0].keyActivities || []).map((item, i) => (
+                  <EditableListItem key={i} value={item} onChange={(v) => updatePhase60_90Activity(0, i, v)} onDelete={() => deletePhase60_90Activity(0, i)} color={phases60_90[0].color} />
+                ))}
+                <AddItemButton onClick={() => addPhase60_90Activity(0)} label="Add action" />
+              </div>
+            </div>
           </div>
         </Card>
       )}
 
       {activePhase === 2 && phases60_90[1] && (
-        <Card style={{ marginBottom: '24px', borderLeft: `4px solid ${phases60_90[1].color}` }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
-            <div>
-              <div style={{ fontSize: '12px', fontWeight: '700', color: phases60_90[1].color, letterSpacing: '0.04em', marginBottom: '4px' }}>{phases60_90[1].days}</div>
-              <EditableText value={phases60_90[1].title} onChange={(v) => updatePhase60_90Field(1, 'title', v)} style={{ fontSize: '18px', fontWeight: '600', color: colors.text, margin: 0 }} />
-            </div>
-            <EditableText value={phases60_90[1].goal} onChange={(v) => updatePhase60_90Field(1, 'goal', v)} style={{ fontSize: '13px', fontWeight: '500', color: phases60_90[1].color, backgroundColor: phases60_90[1].color + '12', padding: '8px 14px', borderRadius: '8px', maxWidth: '100%', flex: '1 1 280px' }} multiline />
+        <Card style={{ marginBottom: '24px', padding: '24px', borderLeft: `4px solid ${phases60_90[1].color}` }}>
+          <div style={{ marginBottom: '16px' }}>
+            <div style={{ fontSize: '12px', fontWeight: '700', color: phases60_90[1].color, letterSpacing: '0.04em', marginBottom: '4px' }}>{phases60_90[1].days}</div>
+            <EditableText value={phases60_90[1].title} onChange={(v) => updatePhase60_90Field(1, 'title', v)} style={{ fontSize: '18px', fontWeight: '600', color: colors.text, margin: 0 }} />
+            <EditableText value={phases60_90[1].goal} onChange={(v) => updatePhase60_90Field(1, 'goal', v)} style={{ fontSize: '13px', color: colors.textSecondary, marginTop: '8px', display: 'block' }} />
           </div>
-          <div style={{ fontSize: '13px', fontWeight: '600', color: colors.textMuted, marginBottom: '10px' }}>Key Activities</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {phases60_90[1].keyActivities.map((item, i) => (
-              <EditableListItem key={i} value={item} onChange={(v) => updatePhase60_90Activity(1, i, v)} onDelete={() => deletePhase60_90Activity(1, i)} color={phases60_90[1].color} style={{ padding: '10px', backgroundColor: phases60_90[1].color + '08', borderRadius: '8px', border: `1px solid ${phases60_90[1].color}20` }} />
-            ))}
-            <AddItemButton onClick={() => addPhase60_90Activity(1)} label="Add activity" />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+            <div>
+              <div style={{ fontSize: '13px', fontWeight: '600', color: colors.textMuted, marginBottom: '10px' }}>Key pillars</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {(phases60_90[1].pillars || []).map((p, i) => (
+                  <EditableListItem key={i} value={p} onChange={(v) => updatePhase60_90Pillar(1, i, v)} onDelete={() => deletePhase60_90Pillar(1, i)} color={phases60_90[1].color} />
+                ))}
+                <AddItemButton onClick={() => addPhase60_90Pillar(1)} label="Add pillar" />
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: '13px', fontWeight: '600', color: colors.textMuted, marginBottom: '10px' }}>Key actions</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {(phases60_90[1].keyActivities || []).map((item, i) => (
+                  <EditableListItem key={i} value={item} onChange={(v) => updatePhase60_90Activity(1, i, v)} onDelete={() => deletePhase60_90Activity(1, i)} color={phases60_90[1].color} />
+                ))}
+                <AddItemButton onClick={() => addPhase60_90Activity(1)} label="Add action" />
+              </div>
+            </div>
           </div>
         </Card>
       )}
 
-      {/* General SA: Key Activities of Value & Replication */}
+      {/* SA Strat West Team: Key Activities of Value & Replication */}
       <Card style={{ marginBottom: '24px', borderLeft: `4px solid ${colors.info}` }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
           <div style={{
@@ -3314,7 +3491,7 @@ const First30DaysSection = () => {
           }}>
             🔄
           </div>
-          <h5 style={{ fontSize: '16px', fontWeight: '600', color: colors.text, margin: 0 }}>General SA: Key Activities of Value & Replication</h5>
+          <h5 style={{ fontSize: '16px', fontWeight: '600', color: colors.text, margin: 0 }}>SA Strat West Team: Key Activities of Value & Replication</h5>
         </div>
         <p style={{ fontSize: '14px', color: colors.textSecondary, lineHeight: 1.6, marginBottom: '20px' }}>
           <EditableText
@@ -3326,7 +3503,7 @@ const First30DaysSection = () => {
         </p>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
           <div>
-            <h6 style={{ fontSize: '13px', fontWeight: '600', color: colors.info, marginBottom: '10px' }}>Identifying key activities of value</h6>
+            <h6 style={{ fontSize: '13px', fontWeight: '600', color: colors.info, marginBottom: '10px' }}>Identifying key activities of value (Strat West)</h6>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {generalSAIdentifying.map((item, i) => (
                 <EditableListItem
@@ -3344,7 +3521,7 @@ const First30DaysSection = () => {
             />
           </div>
           <div>
-            <h6 style={{ fontSize: '13px', fontWeight: '600', color: colors.info, marginBottom: '10px' }}>Creating process to replicate</h6>
+            <h6 style={{ fontSize: '13px', fontWeight: '600', color: colors.info, marginBottom: '10px' }}>Creating process to replicate (Strat West)</h6>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {generalSAReplication.map((item, i) => (
                 <EditableListItem
@@ -4978,7 +5155,7 @@ export default function App() {
       'Backfill + headcount clarity for West Strat; maintain 3:1 AE:SA ratio.',
       'Product Vision Changes: Agent Builder sunset; enable team on Writer Agent and platform changes.',
       'Solutions Architecture scaffolding; reduce silos, create consistency.',
-      ''
+      'Writer Agent = New POC Playbook and figuring out what scales and lands'
     ],
     strategicBets: [
       'Pods over round-robin: consistent SA/AE pairings, deeper account knowledge.',
@@ -5253,39 +5430,82 @@ export default function App() {
                 </div>
               </div>
 
-              {/* SA Leadership Lens + four-pillar framework */}
-              <Card style={{ marginTop: '24px', borderLeft: `4px solid ${colors.purple}`, backgroundColor: colors.purple + '06' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+              {/* SA Leadership Lens: Stronger West SA Strat Team → Identify, Action, Scale, Share */}
+              <Card style={{ marginTop: '24px', borderLeft: `4px solid ${colors.purple}`, backgroundColor: colors.purple + '06', overflow: 'hidden' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
                   <div style={{
-                    width: '32px',
-                    height: '32px',
-                    borderRadius: '8px',
-                    backgroundColor: colors.purple + '20',
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '10px',
+                    background: `linear-gradient(135deg, ${colors.purple}30 0%, ${colors.purple}15 100%)`,
+                    border: `1px solid ${colors.purple}40`,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    fontSize: '16px'
+                    fontSize: '18px',
+                    boxShadow: `0 2px 8px ${colors.purple}20`
                   }}>
                     🔬
                   </div>
-                  <h3 style={{ fontSize: '16px', fontWeight: '600', margin: 0, color: colors.text }}>What you'd adapt for SA leadership</h3>
+                  <h3 style={{ fontSize: '18px', fontWeight: '600', margin: 0, color: colors.text, letterSpacing: '-0.02em' }}>From experience to SA Leadership</h3>
                 </div>
-                <p style={{ fontSize: '12px', fontWeight: '700', color: colors.purple, marginBottom: '12px', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Framework: Identify → Action → Scale → SA Efficiency</p>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '20px' }}>
-                  {SA_LEADERSHIP_FRAMEWORK.map((pillar, i) => (
-                    <div key={i} style={{ padding: '12px 14px', borderRadius: '10px', border: `2px solid ${colors.purple}30`, backgroundColor: colors.purple + '10', fontSize: '13px', fontWeight: '600', color: colors.text }}>
-                      {pillar.label}
-                    </div>
-                  ))}
+                <div style={{
+                  marginBottom: '16px',
+                  padding: '20px 24px',
+                  borderRadius: '16px',
+                  border: `2px solid ${colors.purple}35`,
+                  background: `linear-gradient(145deg, ${colors.purple}14 0%, ${colors.purple}08 100%)`,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  textAlign: 'center',
+                  boxShadow: `0 4px 16px ${colors.purple}12`
+                }}>
+                  <p style={{ fontSize: '11px', fontWeight: '800', color: colors.purple, margin: 0, marginBottom: '16px', letterSpacing: '0.12em', textTransform: 'uppercase' }}>Stronger West SA Strat Team</p>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr auto 1fr auto 1fr', width: '100%', maxWidth: '600px', margin: '0 auto', gap: '8px', alignItems: 'stretch' }}>
+                    {SA_LEADERSHIP_FRAMEWORK.flatMap((pillar, i) => [
+                      <div
+                        key={`pillar-${i}`}
+                        style={{
+                          padding: '18px 16px',
+                          borderRadius: '12px',
+                          border: `2px solid ${colors.purple}45`,
+                          background: `linear-gradient(180deg, ${colors.purple}22 0%, ${colors.purple}12 100%)`,
+                          fontSize: '14px',
+                          fontWeight: '700',
+                          color: colors.text,
+                          letterSpacing: '-0.01em',
+                          boxShadow: `0 2px 8px ${colors.purple}15`,
+                          minHeight: '56px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                      >
+                        {pillar.label}
+                      </div>,
+                      ...(i < SA_LEADERSHIP_FRAMEWORK.length - 1 ? [<span key={`arrow-${i}`} style={{ color: colors.purple, fontWeight: '700', fontSize: '16px', opacity: 0.9, display: 'flex', alignItems: 'center', justifyContent: 'center' }} aria-hidden>→</span>] : [])
+                    ])}
+                  </div>
                 </div>
-                <p style={{ fontSize: '14px', color: colors.textSecondary, lineHeight: '1.7', margin: 0, whiteSpace: 'pre-wrap' }}>
-                  <EditableText
-                    value={overviewContent.saLeadershipLens ?? DEFAULT_SA_LEADERSHIP_LENS}
-                    onChange={(v) => updateOverviewContent('saLeadershipLens', v)}
-                    style={{ fontSize: '14px', color: colors.textSecondary }}
-                    multiline
-                  />
-                </p>
+                <div style={{ width: '100%', paddingTop: '2px' }}>
+                  <p style={{
+                    fontSize: '14px',
+                    color: colors.textSecondary,
+                    lineHeight: 1.5,
+                    margin: 0,
+                    whiteSpace: 'pre-wrap',
+                    maxWidth: '100%'
+                  }}>
+                    <EditableText
+                      value={overviewContent.saLeadershipLens ?? DEFAULT_SA_LEADERSHIP_LENS}
+                      onChange={(v) => updateOverviewContent('saLeadershipLens', v)}
+                      style={{ fontSize: '14px', color: colors.textSecondary, lineHeight: 1.5 }}
+                      multiline
+                    />
+                  </p>
+                </div>
               </Card>
             </div>
               );
@@ -5299,7 +5519,7 @@ export default function App() {
             
             // For non-overview sections: summary first, or full content after "Double Click" (anecdotes has no summary)
             // Sections in SECTIONS_WITHOUT_SUMMARY skip the summary card and always show full content
-            const SECTIONS_WITHOUT_SUMMARY = ['field', 'leadership', 'gtm', 'hiring', 'operating'];
+            const SECTIONS_WITHOUT_SUMMARY = ['field', 'leadership', 'gtm', 'hiring', 'operating', 'first30'];
             if (section.id !== 'overview') {
               const sectionSummary = SECTION_SUMMARIES[section.id];
               const skipSummaryForSection = SECTIONS_WITHOUT_SUMMARY.includes(section.id);
