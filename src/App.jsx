@@ -43,6 +43,19 @@ const colors = {
   gray900: '#1a1a1a',
 };
 
+// SA Leadership: four-pillar framework used across the playbook
+const SA_LEADERSHIP_FRAMEWORK = [
+  { label: 'Identify', short: 'What to spot' },
+  { label: 'Action', short: 'What to do' },
+  { label: 'Scale', short: 'How to scale' },
+  { label: 'SA Efficiency', short: 'SA efficiency' }
+];
+
+// Default "What you'd adapt for SA leadership" (condensed)
+const DEFAULT_SA_LEADERSHIP_LENS = `Core tension: qualification rigor → technical leverage. Ensure technical validation before commercial momentum.
+Stage 0–5: define artifacts, stakeholder mapping, and validation criteria before each gate.
+Hidden lift: SAs absorb cross-functional technical complexity so engineers focus on solution design.`;
+
 // Local Storage Helper Functions
 const saveToStorage = (key, value) => {
   try {
@@ -75,35 +88,47 @@ const useLocalStorage = (key, initialValue) => {
   const [storedValue, setStoredValue] = useState(() => {
     const stored = loadFromStorage(key, initialValue);
 
-    // For overviewContent, update context, strategicBets, strategicPriorities with new defaults
-    // Check version to force update when defaults change
+    // For overviewContent: push condensed overview to all users (override localStorage)
     if (key === 'leadershipPlaybook_overviewContent' && stored && initialValue) {
       const storedVersion = stored._version || 0;
-      const currentVersion = 6; // 6 = Strategic Priorities exact content
+      const currentVersion = 10; // 10 = Condensed overview (direct, straight to the point)
 
       if (storedVersion < currentVersion) {
-        const updated = { ...stored };
-        if (Array.isArray(initialValue.context)) updated.context = initialValue.context;
-        if (Array.isArray(initialValue.strategicBets)) updated.strategicBets = initialValue.strategicBets;
-        // Strategic Priorities: always set to these three bullets
-        updated.strategicPriorities = [
-          'Shift SAs from "demo monkey" to strategic partner (ROI storytelling, business acumen)',
-          'Fix Writer Agent positioning—complement, not replacement',
-          'Establish guardrails: what scales in post-sales vs. custom builds'
-        ];
-        updated._version = currentVersion;
+        const updated = { ...initialValue, _version: currentVersion };
         saveToStorage(key, updated);
         return updated;
       }
     }
 
-    // Migrate sections: First 100 Days -> First 30 Days (10/20/30 focus)
-    if (key === 'leadershipPlaybook_sections' && Array.isArray(stored) && stored.some((s) => s.id === 'first100')) {
-      const migrated = stored.map((s) =>
-        s.id === 'first100'
-          ? { ...s, id: 'first30', label: 'First 30 Days', title: 'First 30 Days', subtitle: 'What I would aim to have in place (10 / 20 / 30 day focus), key priorities, risks and assumptions' }
-          : s
-      );
+    // Migrate sections: First 100 Days -> first30, or update first30 title to 30-60-90
+    if (key === 'leadershipPlaybook_sections' && Array.isArray(stored)) {
+      if (stored.some((s) => s.id === 'first100')) {
+        const migrated = stored.map((s) =>
+          s.id === 'first100'
+            ? { ...s, id: 'first30', label: '30-60-90', title: '30-60-90', subtitle: 'First 30 days: actions & plans; Days 31-60: scale & refine; Days 61-90: broaden & embed' }
+            : s
+        );
+        saveToStorage(key, migrated);
+        return migrated;
+      }
+      if (stored.some((s) => s.id === 'first30' && (s.title === 'First 30 Days' || s.label === 'First 30 Days'))) {
+        const migrated = stored.map((s) =>
+          s.id === 'first30' ? { ...s, label: '30-60-90', title: '30-60-90', subtitle: 'First 30 days: actions & plans; Days 31-60: scale & refine; Days 61-90: broaden & embed' } : s
+        );
+        saveToStorage(key, migrated);
+        return migrated;
+      }
+    }
+
+    // One-time migration: Feedback I've Received (Leadership Principles) to new five bullets
+    if (key === 'leadershipPlaybook_feedback' && Array.isArray(stored) && stored.length === 4 && stored.some((s) => s && typeof s === 'string' && s.includes('Maureen'))) {
+      const migrated = [
+        'Strong collaboration skills and technical depth',
+        'Able to turn complex to composed and simplified',
+        'Doesn\'t shy away from feedback for himself or others he\'s coaching',
+        'Direct with action, gives feedback with steps to improve',
+        'Plays and coaches'
+      ];
       saveToStorage(key, migrated);
       return migrated;
     }
@@ -328,6 +353,278 @@ const AnimatedCounter = ({ value, suffix = '', duration = 1500 }) => {
   return <span ref={ref}>{count}{suffix}</span>;
 };
 
+// Section summary content: tangible first-line-manager steps + support (one-slide exec summary; "Double Click" opens full analysis)
+const SECTION_SUMMARIES = {
+  leadership: {
+    headline: 'What I would do to make the team a well-oiled machine',
+    summary: 'Coaching for outcomes, ruthless prioritization (technical leverage over qualification rigor), culture under volatility, hiring for ambiguity—using Identification → Action → Scale → Protect SA time so everyone gets the support they need.',
+    bullets: [
+      'Identification: Spot where SAs are activity-heavy but outcome-unclear; where technical validation could be stronger before commercial momentum; where tension or ambiguity is draining time.',
+      'What action to take: Outcome check-ins (blockers, not status); quarterly "stop doing" list; monthly "state of the team" sessions—no spin; name tension when I sense it.',
+      'How to scale: Post-deal retros to build "How the best SAs work" playbook; technical stage gates (Stage 0–5 artifacts, stakeholder mapping, validation criteria); pair developing SAs with thriving ones via deal co-ownership.',
+      'How to protect SA time: Coach toward 70%+ time on top 3 accounts; deprioritize what doesn\'t pass the technical-leverage bar; 90-day trust checkpoint for new SAs; preserve 40-hour max.'
+    ]
+  },
+  hiring: {
+    headline: 'Hiring & Team Design',
+    summary: 'The SA I hire: Technical depth in AI/ML and process design, GTM credibility from running POCs and translating tech to business value, and the consultative low-ego presence that wins executive trust. How I develop them: Two tracks (technical mastery vs executive presence), structured onboarding beyond "shadow and figure it out," and systematic coaching tied to real deals. How I scale without losing culture: Document what great looks like, share content and learnings continuously, and protect the collaborative pace that makes top SAs want to stay.',
+    bullets: [
+      'Profile: Technical Depth, GTM Experience, Business Acumen and Persona for Success—balance across all three.',
+      'Internal vs External: Internal progression and coaching tracks; external backfill and net-new tied to planning.',
+      'Maintaining Culture: Current team, scaling culture, onboarding, and team values—replication and sustainable pace.'
+    ]
+  },
+  gtm: {
+    headline: 'What I would do to drive impact pre- and post-sale',
+    summary: 'Technical validation before commercial momentum; structured POCs and stage gates; adoption and handoffs that stick. Framework: Identification → Action → Scale → Protect SA time.',
+    bullets: [
+      'Identification: Spot where POCs are generic or technical validation could be stronger before stage gates; where handoffs could be clearer ("information exists but isn\'t accessible"); where SAs are doing hidden lift (absorbing technical complexity).',
+      'What action to take: Pre-sale—structured POCs, technical artifacts and validation criteria at Stage 0–5; Objection Handling Playbook with real deal language. Post-sale—enablement on Rules >50%, MCPS >40%, Composer >30%; standardized handoffs.',
+      'How to scale: Partner SA rules (RACI, Scorecard, Tier 1 = 2 joint intros/month, monthly PBRs); competitive matrix and "Why Writer Wins" narratives; Agent Builder sunset → Applications focus.',
+      'How to protect SA time: Clear stage gates so SAs don\'t chase unvalidated deals; capacity dashboard and deal assignment rules; partner guardrails so SAs aren\'t pulled into fishing expeditions.'
+    ]
+  },
+  operating: {
+    headline: 'What I would do to give the team rhythm and support',
+    summary: 'Leading and lagging metrics, fixed cadences, and a coaching model so every SA knows what success looks like and gets targeted support. Framework: Identification → Action → Scale → Protect SA time.',
+    bullets: [
+      'Identification: Spot capacity overload (yellow 18+ deals / red 21+); where SAs are activity-heavy but outcome-unclear; where technical validation could be stronger before commercial push.',
+      'What action to take: Leading metrics—POC conversion, 3+ check-ins per trial, feature adoption, capacity dashboard; lagging—win rate, expansion, 90-day retention. Cadences: weekly team call (deal reviews, blockers), weekly 1:1s, forecast review, QBR quarterly.',
+      'How to scale: New SAs—10 post-mortems per quarter, shadow calls with 15-min debrief, CS/sales enablement. Tenured—Executive presence, "Win Story of the Week," master deck, path-to-Lead doc.',
+      'How to protect SA time: Capacity dashboard and flex-capacity protocol; deprioritize activities that don\'t pass the technical-leverage bar; protect 1:1 and career conversations as non-negotiable.'
+    ]
+  },
+  first30: {
+    headline: 'First 30 days: 10 / 20 / 30',
+    summary: 'What I would aim to have in place in the first 30 days: Discovery & baseline (1–10), pilot design & build (11–20), operationalize & rhythm (21–30)—with General SA key activities running in parallel.',
+    bullets: [],
+    timeline: [
+      {
+        phase: 'Days 1–10',
+        label: 'Discovery & Baseline',
+        color: colors.accent,
+        items: [
+          'Partner SA: Audit partner-sourced deals; interview 3–5 regional SAs on friction; document "telephone game" workflow; pull partner vs. direct velocity',
+          'Partner Accountability: Create Partner Engagement Scorecard; define Tier 1/2/3 (e.g. Tier 1: 2 joint intros/month, quarterly pipeline target)',
+          'Differentiation: 5 competitive-learning interviews ("just use ChatGPT"); audit collateral; competitive matrix Writer vs. ChatGPT Enterprise vs. Claude vs. Gemini',
+          'Capacity: SA Capacity Dashboard—deal count, weighted pipeline; yellow 18+ deals or 120% pipeline, red 21+ or 140%',
+          'Retention: Confidential 1:1s with each West Coast SA—stay 2 years? Energizes vs. drains? Retention focus; career aspirations',
+          'General SA: Shadow top SAs; win/loss + deal-velocity data; document 3–5 repeatable patterns; draft "how the best SAs work"'
+        ]
+      },
+      {
+        phase: 'Days 11–20',
+        label: 'Pilot Design & Build',
+        color: colors.purple,
+        items: [
+          'Partner SA: West Coast 60-day pilot; Partner Specialist overlay in pod; shared Slack/deal rooms; RACI—Partner Specialist owns partner relationship, Regional SA owns solution + customer',
+          'Partner Accountability: Partner Pitch Kits for top 5 use cases (2-min pitch, proof points, discovery questions, demo script); "Why Writer vs. DIY" one-pager',
+          'Differentiation: Objection Handling Playbook ("just use ChatGPT," "we\'ll build ourselves," "Gemini free"); 3 vertical "Why Writer Wins"; TCO/time-to-value',
+          'Capacity: Audit SA-to-AE mappings; rebalancing by geo/vertical/velocity; Deal Assignment Rules + escalation when capacity constrained',
+          'Retention: Lighthouse Deal—2–3 strategic accounts/quarter, exec touchpoints; SA Innovation Sprint (2-day net-new, present to leadership); Executive Shadow',
+          'General SA: Key activities → templates/playbooks (discovery, demo, exit gates, handoffs); replication cadence; pilot with 1–2 SAs'
+        ]
+      },
+      {
+        phase: 'Days 21–30',
+        label: 'Operationalize & Rhythm',
+        color: colors.warning,
+        items: [
+          'Partner SA: Launch pilot with success metrics (deal velocity, satisfaction, utilization); weekly retro; business case for broader rollout',
+          'Partner Accountability: Monthly Partner Business Reviews + scorecard; Joint Account Planning for Tier 1 (named accounts, owner, next action, commit); escalation path—2 months below minimums → exec-to-exec',
+          'Differentiation: 90-min SA enablement on Objection Playbook; "Win Story of the Week" in Slack; Seismic/Highspot competitive collection; quarterly intel refresh',
+          'Capacity: Weekly 15-min capacity check-in in standup (dashboard, flag imbalances); flex-capacity protocol when SA hits red (redistribution, AE communication); strategic-deal criteria',
+          'Retention: Monthly Impact Spotlight (SA presents to team + leadership); path-to-Lead doc (deals, enablement, lighthouse); quarterly career conversations (separate from performance)',
+          'General SA: Playbook in use; replication cadence + feedback loop; "key activities of value" as standing team topic'
+        ]
+      }
+    ]
+  },
+  field: {
+    headline: 'What I would do with field feedback',
+    summary: 'Turn SA/AE alignment opportunities, sales process focus areas, and Writer Agent positioning into concrete actions—pod structures, handoffs, and messaging. Framework: Identification → Action → Scale → Protect SA time.',
+    bullets: [
+      'Identification: Spot SA/AE alignment opportunities (round-robin vs. consistent pairings); where "information exists but isn\'t accessible"; where SAs do hidden lift (technical complexity) that could be systematized.',
+      'What action to take: Move to consistent SA/AE pairings and pod structures; standardized handoffs and exit gates; POC templates and clear criteria; Writer Agent as complement, not replacement.',
+      'How to scale: Pre-to-post handoff protocol; differentiation story in every enablement; make feedback actionable—"reactive siloed work" → proactive partnership.',
+      'How to protect SA time: Define when to engage SAs so they\'re not over-pulled; improve demo loading/performance so SAs can focus on high-value work.'
+    ]
+  },
+  anecdotes: {
+    headline: 'What I would do with recognition and feedback',
+    summary: 'Surface and celebrate what colleagues say—reinforce what good looks like and ensure the team feels seen and supported.',
+    bullets: [
+      'Identification: Spot high performers and hidden lift (SAs absorbing technical complexity); behaviors we want to scale—collaboration, technical depth, executive presence.',
+      'What action to take: Share peer and stakeholder feedback in team settings (Win Story of the Week, Impact Spotlight); tie anecdotes to explicit culture.',
+      'How to scale: Use recognition in 1:1s and career conversations so growth is grounded in real examples.',
+      'How to protect SA time: Ensure the team feels seen and supported so morale and retention protect capacity.'
+    ]
+  }
+};
+
+// Summary card: one-slide exec style (eye-catching); "Double Click" opens full analysis
+const SectionSummaryCard = ({ sectionNumber, title, subtitle, headline, summary, bullets, timeline, onShowDetail, sectionColor = colors.accent }) => (
+  <div
+    onDoubleClick={onShowDetail}
+    style={{
+      maxWidth: timeline ? '100%' : '800px',
+      margin: '0 auto',
+      padding: 0,
+      backgroundColor: colors.bg,
+      borderRadius: '20px',
+      border: `2px solid ${colors.border}`,
+      boxShadow: '0 8px 32px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04)',
+      cursor: 'pointer',
+      overflow: 'hidden'
+    }}
+  >
+    {/* Accent strip + section label */}
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: '16px',
+      padding: '24px 32px',
+      background: `linear-gradient(135deg, ${sectionColor}18 0%, ${sectionColor}08 100%)`,
+      borderBottom: `3px solid ${sectionColor}`
+    }}>
+      <span style={{
+        fontSize: '14px',
+        fontWeight: '700',
+        color: sectionColor,
+        letterSpacing: '0.08em',
+        textTransform: 'uppercase',
+        fontFamily: "'Inter', sans-serif"
+      }}>
+        {sectionNumber}
+      </span>
+      <h2 style={{
+        fontSize: '32px',
+        fontWeight: '800',
+        color: colors.text,
+        margin: 0,
+        letterSpacing: '-0.03em',
+        lineHeight: 1.15,
+        fontFamily: "'Inter', sans-serif"
+      }}>
+        {title}
+      </h2>
+    </div>
+
+    <div style={{ padding: '28px 32px 32px' }}>
+      {headline && (
+        <p style={{
+          fontSize: '15px',
+          fontWeight: '700',
+          color: sectionColor,
+          margin: '0 0 12px',
+          letterSpacing: '-0.01em',
+          lineHeight: 1.4
+        }}>
+          {headline}
+        </p>
+      )}
+      <p style={{
+        fontSize: '16px',
+        color: colors.text,
+        lineHeight: 1.6,
+        marginBottom: timeline ? '24px' : '20px',
+        fontWeight: '500'
+      }}>
+        {summary}
+      </p>
+
+      {timeline && timeline.length > 0 ? (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+          gap: '16px',
+          marginBottom: '28px'
+        }}>
+          {timeline.map((t, idx) => (
+            <div
+              key={idx}
+              style={{
+                borderRadius: '12px',
+                border: `2px solid ${t.color}30`,
+                backgroundColor: t.color + '08',
+                overflow: 'hidden',
+                minWidth: 0
+              }}
+            >
+              <div style={{
+                padding: '12px 14px',
+                backgroundColor: t.color + '18',
+                borderBottom: `2px solid ${t.color}`,
+                fontSize: '12px',
+                fontWeight: '700',
+                color: t.color,
+                letterSpacing: '0.04em',
+                textTransform: 'uppercase'
+              }}>
+                {t.phase}
+              </div>
+              <div style={{
+                padding: '10px 14px 12px',
+                fontSize: '13px',
+                fontWeight: '600',
+                color: colors.text,
+                lineHeight: 1.3
+              }}>
+                {t.label}
+              </div>
+              <ul style={{
+                margin: 0,
+                padding: '0 14px 14px 28px',
+                fontSize: '12px',
+                color: colors.textSecondary,
+                lineHeight: 1.55,
+                fontWeight: '500'
+              }}>
+                {t.items.map((item, i) => (
+                  <li key={i} style={{ marginBottom: '8px' }}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <ul style={{
+          margin: '0 0 28px',
+          paddingLeft: '22px',
+          fontSize: '15px',
+          color: colors.textSecondary,
+          lineHeight: 1.7,
+          fontWeight: '500'
+        }}>
+          {bullets.map((b, i) => (
+            <li key={i} style={{ marginBottom: '10px' }}>{b}</li>
+          ))}
+        </ul>
+      )}
+
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onShowDetail(); }}
+        onDoubleClick={(e) => { e.stopPropagation(); onShowDetail(); }}
+        style={{
+          padding: '14px 28px',
+          borderRadius: '10px',
+          border: 'none',
+          backgroundColor: sectionColor,
+          color: '#fff',
+          fontSize: '15px',
+          fontWeight: '700',
+          cursor: 'pointer',
+          transition: 'all 0.2s ease',
+          boxShadow: `0 4px 12px ${sectionColor}40`
+        }}
+      >
+        Double Click
+      </button>
+    </div>
+  </div>
+);
+
 // Card Component - Writer.com style
 const Card = ({ children, style = {} }) => (
   <div style={{ 
@@ -400,10 +697,10 @@ const PRINCIPLE_MODAL_CONTENT = [
     frameworkSub: 'Define → Develop → Delegate',
     frameworkDesc: 'This framework mirrors how top SAs already operate with customers—clarifying success criteria, building capability, then stepping back. It scales your personal approach by teaching the method, not just the motion.',
     guidelines: [
-      'Start each engagement by co-creating an outcome contract with the SA: "What does success look like? How will we measure it?" Then step back from the how',
-      'Replace status updates with 15-minute "outcome check-ins" focused on blockers, not activity',
-      'Run post-deal retrospectives that ask "what worked, what would you replicate?" to build your "How the best SAs work" playbook',
-      'Shadow your SAs on complex deals, then have them shadow you—coach only when asked'
+      'Identification: Spot where SAs are activity-heavy but outcome-unclear; identify blockers and where technical validation could be stronger before commercial push.',
+      'What action to take: Co-create an outcome contract with each SA—"What does success look like? How will we measure it?" Replace status updates with 15-minute "outcome check-ins" focused on blockers.',
+      'How to scale: Run post-deal retrospectives ("what worked, what would you replicate?") to build your "How the best SAs work" playbook; shadow SAs on complex deals, then have them shadow you.',
+      'How to protect SA time: Step back from the how; coach only when asked so SAs own their calendar and don\'t default to status-theater.'
     ],
     examplesInPractice: [
       'Coaching the local West SA team and mentoring on best practices to get ramped up as quickly as possible.',
@@ -412,14 +709,14 @@ const PRINCIPLE_MODAL_CONTENT = [
   },
   {
     title: 'Ruthless Prioritization',
-    framework: 'ICE Scoring for Team Capacity',
-    frameworkSub: 'Impact × Confidence × Effort = Priority Score',
-    frameworkDesc: 'ICE gives the team a shared language for tradeoffs. Instead of debating opinions about what matters, you\'re calibrating on three variables everyone can assess. It removes the subjectivity that slows down prioritization conversations.',
+    framework: 'Technical leverage over qualification rigor',
+    frameworkSub: 'Technical validation before commercial momentum',
+    frameworkDesc: 'For SA leadership the core tension shifts from "qualification rigor" to "technical leverage." Your version of left-shifted scrutiny is ensuring technical validation happens before commercial momentum builds false confidence. ICE (Impact × Confidence × Effort) still gives the team a shared language for tradeoffs; layer in stage gates: define what technical artifacts, stakeholder mapping, and validation criteria must exist before each deal stage (Stage 0–5). Helping hidden lift is a big win: SAs absorbing cross-functional technical complexity so engineers can focus on solution design rather than navigating product gaps or integration unknowns.',
     guidelines: [
-      'Maintain a quarterly "stop doing" list—identify 2-3 activities the team will explicitly deprioritize and make it visible',
-      'Implement a deal qualification rubric so effort matches opportunity value',
-      'Have each SA identify their single highest-leverage activity weekly; track patterns across the team',
-      'Conduct monthly calendar audits: "What percentage of time went to top 3 accounts?" Coach toward 70%+'
+      'Identification: Spot where commercial momentum is building without technical validation; identify SAs doing hidden lift (absorbing technical complexity so eng can focus on solution design).',
+      'What action to take: Maintain a quarterly "stop doing" list; implement technical stage gates (artifacts, stakeholder mapping, validation criteria) before advancing deals; conduct monthly calendar audits—coach toward 70%+ time on top 3 accounts.',
+      'How to scale: Define Stage 0–5 "must haves" for SA—technical artifacts, stakeholder mapping, validation criteria at each gate; have each SA identify their single highest-leverage activity weekly and track patterns.',
+      'How to protect SA time: Deprioritize activities that don\'t pass the technical-leverage bar; use capacity dashboard and flex-capacity protocol so SAs aren\'t overloaded by deals that haven\'t cleared validation.'
     ],
     examplesInPractice: [
       'Working across partnerships, normal GTM opportunities, owning tech partnership integrations and builds, coaching/mentoring, and ad hoc engagements such as webinars, conferences, speaking at events and trainings. Ruthless prioritization is a common practice.'
@@ -429,12 +726,12 @@ const PRINCIPLE_MODAL_CONTENT = [
     title: 'Culture Building Under Volatility',
     framework: 'SCARF Model (David Rock)',
     frameworkSub: 'Status, Certainty, Autonomy, Relatedness, Fairness',
-    frameworkDesc: 'SCARF identifies the five domains where people feel most threatened during change. By proactively addressing each—especially certainty and status during reorgs—you reduce the cognitive load that kills performance when things get ambiguous.',
+    frameworkDesc: 'SCARF identifies the five domains where people feel most affected during change. By proactively addressing each—especially certainty and status during reorgs—you reduce the cognitive load that impacts performance when things get ambiguous.',
     guidelines: [
-      'Share transparent "what I know / what I don\'t know" updates during uncertainty, even when nothing has changed',
-      'Hold monthly "state of the team" sessions: wins, challenges, what leadership is hearing—no spin',
-      'Pair struggling SAs with thriving ones through deal co-ownership, not formal mentorship',
-      'Name tension when you sense it: "This feels off. Let\'s talk about why."'
+      'Identification: Spot where certainty and status are affected (reorgs, strategy shifts); name tension when you sense it—"This feels off. Let\'s talk about why."',
+      'What action to take: Share transparent "what I know / what I don\'t know" updates during uncertainty; hold monthly "state of the team" sessions: wins, challenges, what leadership is hearing—no spin.',
+      'How to scale: Pair developing SAs with thriving ones through deal co-ownership, not formal mentorship; build psychological safety so hidden lift and technical complexity get surfaced.',
+      'How to protect SA time: Reduce cognitive load so SAs aren\'t drained by ambiguity; protect 1:1 and career conversations as non-negotiable.'
     ],
     examplesInPractice: [
       'Building trust and respect among peers and having them vouch for me being their manager to continue building that trust and push for what\'s best for the West SA team in terms of objective and subjective growth.'
@@ -446,10 +743,10 @@ const PRINCIPLE_MODAL_CONTENT = [
     frameworkSub: 'Past behavior → Situational judgment → Values alignment',
     frameworkDesc: 'Traditional interviews reward polish and preparation. This structure specifically surfaces how candidates behave when the path isn\'t clear—which is the actual job. Past ambiguity navigation predicts future ambiguity navigation better than hypotheticals.',
     guidelines: [
-      'Use a "messy case study" interview with an intentionally incomplete brief—evaluate navigation, not correctness',
-      'Ask references about trajectory: "How much did they grow in months 1-6 vs. 6-12?"',
-      'Assign new SAs a real deal in week 2, not week 8—observe how they respond to ambiguity early',
-      'Conduct a 90-day "trust checkpoint" to calibrate where you\'ve been too hands-on vs. where they need more support'
+      'Identification: Spot candidates who thrive in technical ambiguity (product gaps, integration unknowns) and who can absorb cross-functional complexity so eng can focus on solution design.',
+      'What action to take: Use a "messy case study" interview with an intentionally incomplete brief—evaluate navigation, not correctness; ask references about trajectory: "How much did they grow in months 1-6 vs. 6-12?"',
+      'How to scale: Assign new SAs a real deal in week 2, not week 8—observe how they respond to ambiguity early; document "How the best SAs work" so onboarding replicates high-leverage behavior.',
+      'How to protect SA time: Conduct a 90-day "trust checkpoint" to calibrate where you\'ve been too hands-on vs. where they need more support; preserve 40-hour max—additional headcount for overages, not burnout.'
     ],
     examplesInPractice: [
       'Have been on the hiring panel for almost 80% of the current SAs; the team has kept our bar of talent top tier.'
@@ -457,11 +754,150 @@ const PRINCIPLE_MODAL_CONTENT = [
   }
 ];
 
+// Partner SA rules default (used by Leadership Principles — Partnerships tab)
+const defaultPartnerSARules = {
+  coreMission: 'Enable partners to pitch Writer and co-sell effectively while driving revenue through "Manage and Operate" motions with GSIs.',
+  fourPillars: 'The Partner SA function operates across four key areas: generating validated sales opportunities tied to ROI, building scalable enablement frameworks ("train the trainer" approach), supporting product changes with talk tracks, and providing internal team training.',
+  ecosystemStructure: 'Writer\'s ecosystem spans six partner categories: Infrastructure/Technology partnerships (hyperscalers, security, developer platforms), Product Partners (connectors), Service Providers split between G/SIs for advisory versus manage-and-operate work, Data Licensing partnerships, Strategic embed/OEM relationships, and niche SI/AI native partners including MSPs, BPOs, and agencies.',
+  tier1: [
+    'Active partnerships with revenue commitment, executive sponsorship, and Writer involvement in POC criteria',
+    'Advanced training, sandbox access, POC development support, priority Slack support, joint planning, and call support'
+  ],
+  tier2: [
+    'Official agreements with certifications and specific client opportunities identified',
+    'Standard training, sandbox access, limited weekly technical consultation, documentation, office hours, and call support'
+  ],
+  tier3: [
+    'Early-stage discussions with use cases identified',
+    'Intro workshops, public docs, monthly webinars, and basic demo access'
+  ],
+  incubationDeliverables: [
+    'Market/product/competition enablement',
+    'Joint solution builds for reusable assets',
+    'Joint GTM solution maps',
+    'Quarterly product reviews'
+  ],
+  cosellDeliverables: [
+    'Technical scoping',
+    'Technical support for executive meetings',
+    'Use case workshops',
+    'Joint demo/solution builds',
+    'Escalation paths to product and engineering'
+  ],
+  hyperscalerDeliverables: [
+    'Platform enablement',
+    'Technical discussions on model integration and compliance',
+    'Use case workshops',
+    'Quarterly updates'
+  ],
+  techPartnershipDeliverables: [
+    'Demo and enablement',
+    'Customer/use case mapping',
+    'Integration discovery (MCP, API, OEM, Embed)',
+    'Quarterly reviews'
+  ],
+  partnerSAOwns: [
+    'Enablement',
+    'Sandbox access, office hours during active opportunities',
+    'Solution process mapping',
+    'Reusable demo assets',
+    'Thought leadership on AI scaling'
+  ],
+  partnerManagersOwn: [
+    'Onboarding',
+    'Engagement management',
+    'ROI/business case development',
+    'Relationship management',
+    'Expectation setting',
+    'Cross-functional alignment'
+  ],
+  currentConstraints: [
+    'Only two Partner SAs supporting all engagements',
+    'Longer sales cycles compared to direct sales',
+    'Different engagement patterns across partner types (Data Partners, Hyperscalers, etc.)'
+  ],
+  guardRails: [
+    'Fishing expeditions without specific opportunities',
+    'Training without business justification',
+    'Support for non-partners',
+    'Generic capability presentations',
+    'Context-free competitive intelligence requests',
+    'Support for non-engaged clients on AI Studio/Agent Builder'
+  ]
+};
+
+// Ecosystem diagram: Global Partnerships Writer Ecosystem (hierarchical org / process map)
+const defaultEcosystemDiagram = {
+  rootLabel: 'Global Partnerships Writer Ecosystem',
+  branches: [
+    {
+      label: 'Service Providers',
+      children: [
+        { label: 'G/SIs (Manage & Operate)', children: [{ label: 'Niche SI/ AI Natives (Manage & Operate)' }, { label: 'MSP / Outsourcers (BPO; Agencies)' }] },
+        { label: 'G/SIs (Advisories)' }
+      ]
+    },
+    {
+      label: 'Technology Partnerships',
+      children: [
+        { label: 'Product Partners (Connectors)' },
+        { label: 'Data Licensing & Partnerships' },
+        { label: 'Strategics (Embed/OEM)' },
+        { label: 'Security' }
+      ]
+    },
+    {
+      label: 'Infrastructure',
+      children: [
+        { label: 'Hyperscalers' },
+        { label: 'Developer Platforms' },
+        { label: 'Hardware (Future)' }
+      ]
+    }
+  ],
+  partnerSupport: ['Partner Enablement', 'Partner Program + Incentives', 'Partner Tools (Portal, LMS, SFDC)', 'Partner Marketing', 'Partner Sales']
+};
+
+function setInObject(obj, path, value) {
+  if (path.length === 1) {
+    const key = path[0];
+    if (Array.isArray(obj)) {
+      const next = [...obj];
+      next[key] = value;
+      return next;
+    }
+    return { ...obj, [key]: value };
+  }
+  const key = path[0];
+  const nextObj = obj[key] ?? (typeof path[1] === 'number' ? [] : {});
+  return Array.isArray(obj)
+    ? obj.map((item, i) => (i === key ? setInObject(item, path.slice(1), value) : item))
+    : { ...obj, [key]: setInObject(nextObj, path.slice(1), value) };
+}
+
 // Leadership Principles Section
 const LeadershipPrinciplesSection = () => {
   const { isEditMode } = useContext(EditModeContext);
   const [modalPrincipleIndex, setModalPrincipleIndex] = useState(null);
-  
+  const [activeTab, setActiveTab] = useState('principles');
+
+  const [partnerSARules, setPartnerSARules] = useLocalStorage('leadershipPlaybook_partnerSARules', defaultPartnerSARules);
+  const updatePartnerSARules = (key, value) => setPartnerSARules(prev => ({ ...prev, [key]: value }));
+  const updatePartnerSARulesList = (key, index, value) =>
+    setPartnerSARules(prev => ({
+      ...prev,
+      [key]: prev[key].map((item, i) => (i === index ? value : item))
+    }));
+  const addPartnerSARulesListItem = (key) =>
+    setPartnerSARules(prev => ({ ...prev, [key]: [...(prev[key] || []), 'New item - click to edit'] }));
+  const deletePartnerSARulesListItem = (key, index) =>
+    setPartnerSARules(prev => ({ ...prev, [key]: prev[key].filter((_, i) => i !== index) }));
+
+  const [ecosystemDiagram, setEcosystemDiagram] = useLocalStorage('leadershipPlaybook_ecosystemDiagram', defaultEcosystemDiagram);
+  const updateEcosystemDiagram = (path, value) => {
+    setEcosystemDiagram(prev => setInObject(prev, path, value));
+  };
+
   const [philosophy, setPhilosophy] = useLocalStorage(
     'leadershipPlaybook_philosophy',
     'Scale individual contributor success into systematic processes. Document "How the best SA\'s work" for team replication. Build trust through coaching for outcomes, not micromanaging.'
@@ -495,10 +931,11 @@ const LeadershipPrinciplesSection = () => {
   ]);
 
   const [feedback, setFeedback] = useLocalStorage('leadershipPlaybook_feedback', [
-    'Strong collaboration skills and technical depth (Maureen)',
-    'Key growth area: Ruthless prioritization needed for management role',
-    'Can execute work personally but needs to develop team translation/coaching abilities',
-    'Successfully handled direct feedback—didn\'t defend, focused on learning'
+    'Strong collaboration skills and technical depth',
+    'Able to turn complex to composed and simplified',
+    'Doesn\'t shy away from feedback for himself or others he\'s coaching',
+    'Direct with action, gives feedback with steps to improve',
+    'Plays and coaches'
   ]);
 
   const updatePrinciple = (index, field, value) => {
@@ -521,6 +958,46 @@ const LeadershipPrinciplesSection = () => {
 
   return (
     <div>
+      {/* Tabs: Principles | Principles in Action */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', flexWrap: 'wrap' }}>
+        <button
+          onClick={() => setActiveTab('principles')}
+          style={{
+            padding: '10px 20px',
+            borderRadius: '8px',
+            border: `1px solid ${activeTab === 'principles' ? colors.accent : colors.border}`,
+            backgroundColor: activeTab === 'principles' ? colors.accent : 'white',
+            color: activeTab === 'principles' ? 'white' : colors.text,
+            fontSize: '14px',
+            fontWeight: activeTab === 'principles' ? '600' : '500',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+            boxShadow: activeTab === 'principles' ? '0 2px 4px rgba(0, 0, 0, 0.1)' : 'none'
+          }}
+        >
+          Principles
+        </button>
+        <button
+          onClick={() => setActiveTab('partnerships')}
+          style={{
+            padding: '10px 20px',
+            borderRadius: '8px',
+            border: `1px solid ${activeTab === 'partnerships' ? colors.info : colors.border}`,
+            backgroundColor: activeTab === 'partnerships' ? colors.info : 'white',
+            color: activeTab === 'partnerships' ? 'white' : colors.text,
+            fontSize: '14px',
+            fontWeight: activeTab === 'partnerships' ? '600' : '500',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+            boxShadow: activeTab === 'partnerships' ? '0 2px 4px rgba(0, 0, 0, 0.1)' : 'none'
+          }}
+        >
+          Principles in Action
+        </button>
+      </div>
+
+      {activeTab === 'principles' && (
+        <>
       {/* Philosophy */}
       <Card style={{ marginBottom: '24px', backgroundColor: colors.accent + '10', border: `1px solid ${colors.accent}30` }}>
         <p style={{ fontSize: '14px', fontWeight: '600', color: colors.accent, marginBottom: '12px', textTransform: 'uppercase' }}>Leadership Philosophy</p>
@@ -661,6 +1138,7 @@ const LeadershipPrinciplesSection = () => {
                     ×
                   </button>
                 </div>
+                <p style={{ fontFamily: appFont, fontSize: '11px', fontWeight: '600', color: colors.purple, margin: '0 0 12px', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Apply: Identify → Action → Scale → SA Efficiency</p>
                 <div style={{ marginBottom: '16px', padding: '16px', backgroundColor: principle.color + '12', borderRadius: '10px', borderLeft: `4px solid ${principle.color}` }}>
                   <p style={{ fontFamily: appFont, fontSize: '12px', fontWeight: '600', color: principle.color, margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Framework: {content.framework}</p>
                   <p style={{ fontFamily: appFont, fontSize: '14px', fontWeight: '600', color: colors.text, margin: '0 0 8px' }}>{content.frameworkSub}</p>
@@ -729,9 +1207,263 @@ const LeadershipPrinciplesSection = () => {
         </div>
         <AddItemButton onClick={addFeedback} label="Add feedback" />
       </Card>
+        </>
+      )}
+
+      {activeTab === 'partnerships' && (
+        <PartnershipsContent
+          partnerSARules={partnerSARules}
+          updatePartnerSARules={updatePartnerSARules}
+          updatePartnerSARulesList={updatePartnerSARulesList}
+          addPartnerSARulesListItem={addPartnerSARulesListItem}
+          deletePartnerSARulesListItem={deletePartnerSARulesListItem}
+          ecosystemDiagram={ecosystemDiagram}
+          updateEcosystemDiagram={updateEcosystemDiagram}
+        />
+      )}
     </div>
   );
 };
+
+// Oval node for ecosystem diagram (blue oval, grey connecting lines per image)
+const connectorGrey = '#9ca3af';
+const EcosystemNode = ({ label, onUpdate, compact = false }) => (
+  <div
+    style={{
+      padding: compact ? '6px 10px' : '10px 16px',
+      borderRadius: '999px',
+      backgroundColor: '#2563eb',
+      color: 'white',
+      fontSize: compact ? '10px' : '13px',
+      fontWeight: '600',
+      textAlign: 'center',
+      maxWidth: compact ? '140px' : '280px',
+      lineHeight: 1.25,
+      border: '1px solid rgba(255,255,255,0.25)',
+      boxShadow: '0 1px 4px rgba(0,0,0,0.12)'
+    }}
+  >
+    {onUpdate ? <EditableText value={label} onChange={onUpdate} style={{ color: 'white', fontSize: 'inherit', fontWeight: 'inherit', wordBreak: 'break-word' }} /> : label}
+  </div>
+);
+
+// Partnerships tab content (moved from GTM to Leadership Principles)
+const PartnershipsContent = ({
+  partnerSARules,
+  updatePartnerSARules,
+  updatePartnerSARulesList,
+  addPartnerSARulesListItem,
+  deletePartnerSARulesListItem,
+  ecosystemDiagram = defaultEcosystemDiagram,
+  updateEcosystemDiagram = () => {}
+}) => (
+  <div>
+    {/* V1 - Functional Org: Ecosystem diagram (Global Partnerships Writer Ecosystem) — matches reference image */}
+    <Card style={{ marginBottom: '28px', overflow: 'visible', padding: '24px' }}>
+      <h3 style={{ fontSize: '18px', fontWeight: '600', color: colors.text, marginBottom: '8px' }}>V1 - Functional Org: Focused on impact</h3>
+      <p style={{ fontSize: '14px', color: colors.textSecondary, lineHeight: 1.6, marginBottom: '24px', maxWidth: '720px' }}>
+        To build an effective team, we must look across the partner types that will help Writer grow both from a product differentiation perspective; deployment & revenue. Our entire ecosystem is dependent on global partner enablement; a clear partner program & partner marketing delivered in scalable ways.
+      </p>
+      {/* Single dashed border wraps both diagram and Partner Support (per reference image); grid prevents overlap */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(0, 1fr) 220px',
+          gap: '24px',
+          alignItems: 'start',
+          padding: '28px 24px 32px',
+          borderRadius: '16px',
+          border: `2px dashed ${colors.accent}`,
+          backgroundColor: colors.bg,
+          overflow: 'hidden'
+        }}
+      >
+        {/* Left: Tree (minmax(0,1fr) allows shrink; overflow prevents overlap) */}
+        <div style={{ minWidth: 0, overflow: 'auto' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0 }}>
+            <EcosystemNode
+              label={ecosystemDiagram.rootLabel}
+              onUpdate={(v) => updateEcosystemDiagram(['rootLabel'], v)}
+            />
+            <div style={{ width: '2px', height: '24px', backgroundColor: connectorGrey }} />
+            <div style={{ width: '100%', maxWidth: '460px', height: '2px', backgroundColor: connectorGrey }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', maxWidth: '460px', marginTop: '-2px', paddingLeft: '8px', paddingRight: '8px' }}>
+              {(ecosystemDiagram.branches || []).map((_, bi) => (
+                <div key={bi} style={{ width: '2px', height: '20px', backgroundColor: connectorGrey }} />
+              ))}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', maxWidth: '500px', gap: '12px', flexWrap: 'wrap', marginTop: '-2px' }}>
+              {(ecosystemDiagram.branches || []).map((branch, bi) => (
+                <div key={bi} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0, flex: '1 1 120px', minWidth: 100 }}>
+                  <EcosystemNode
+                    label={branch.label}
+                    onUpdate={(v) => updateEcosystemDiagram(['branches', bi, 'label'], v)}
+                    compact
+                  />
+                  {(branch.children || []).length > 0 && (
+                    <>
+                      <div style={{ width: '2px', height: '14px', backgroundColor: connectorGrey, marginTop: '8px' }} />
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+                        {(branch.children || []).map((child, ci) => (
+                          <div key={ci} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0 }}>
+                            <div style={{ width: '2px', height: '10px', backgroundColor: connectorGrey }} />
+                            <EcosystemNode
+                              label={child.label}
+                              onUpdate={(v) => updateEcosystemDiagram(['branches', bi, 'children', ci, 'label'], v)}
+                              compact
+                            />
+                            {child.children && child.children.length > 0 && (
+                              <>
+                                <div style={{ width: '2px', height: '8px', backgroundColor: connectorGrey, marginTop: '6px' }} />
+                                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center', marginTop: '-2px' }}>
+                                  {child.children.map((grand, gi) => (
+                                    <div key={gi} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0 }}>
+                                      <div style={{ width: '2px', height: '8px', backgroundColor: connectorGrey }} />
+                                      <EcosystemNode
+                                        label={grand.label}
+                                        onUpdate={(v) => updateEcosystemDiagram(['branches', bi, 'children', ci, 'children', gi, 'label'], v)}
+                                        compact
+                                      />
+                                    </div>
+                                  ))}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        {/* Right: Partner Support stack — fixed 220px column, no overlap */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {(ecosystemDiagram.partnerSupport || []).map((item, i) => {
+            const isPink = i >= 3;
+            const isPartnerSales = i === 4;
+            return (
+              <div
+                key={i}
+                style={{
+                  padding: '12px 16px',
+                  borderRadius: '8px',
+                  border: `2px ${isPartnerSales ? 'dashed' : 'solid'} ${isPink ? colors.accent : connectorGrey}`,
+                  backgroundColor: isPink ? colors.pink + '40' : colors.gray200,
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  color: colors.text
+                }}
+              >
+                <EditableText value={item} onChange={(v) => updateEcosystemDiagram(['partnerSupport', i], v)} style={{ fontSize: '13px', fontWeight: '600' }} />
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </Card>
+    <h3 style={{ fontSize: '20px', fontWeight: '600', color: colors.text, marginBottom: '20px' }}>Partner SA Rules of Engagement</h3>
+    <Card style={{ marginBottom: '20px', backgroundColor: colors.info + '10', borderLeft: `4px solid ${colors.info}` }}>
+      <h4 style={{ fontSize: '14px', fontWeight: '600', color: colors.textMuted, marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Core Mission</h4>
+      <EditableText value={partnerSARules.coreMission} onChange={(v) => updatePartnerSARules('coreMission', v)} style={{ fontSize: '15px', color: colors.textSecondary, lineHeight: 1.6 }} multiline />
+    </Card>
+    <Card style={{ marginBottom: '20px' }}>
+      <h4 style={{ fontSize: '14px', fontWeight: '600', color: colors.text, marginBottom: '10px' }}>Four Strategic Pillars</h4>
+      <EditableText value={partnerSARules.fourPillars} onChange={(v) => updatePartnerSARules('fourPillars', v)} style={{ fontSize: '14px', color: colors.textSecondary, lineHeight: 1.6 }} multiline />
+    </Card>
+    <Card style={{ marginBottom: '20px' }}>
+      <h4 style={{ fontSize: '14px', fontWeight: '600', color: colors.text, marginBottom: '10px' }}>Partner Ecosystem Structure</h4>
+      <EditableText value={partnerSARules.ecosystemStructure} onChange={(v) => updatePartnerSARules('ecosystemStructure', v)} style={{ fontSize: '14px', color: colors.textSecondary, lineHeight: 1.6 }} multiline />
+    </Card>
+    <h4 style={{ fontSize: '16px', fontWeight: '600', color: colors.text, marginBottom: '12px' }}>Three-Tier Partner Classification</h4>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '24px' }}>
+      <Card style={{ borderTop: `4px solid ${colors.accent}` }}>
+        <h5 style={{ fontSize: '13px', fontWeight: '600', color: colors.accent, marginBottom: '10px' }}>Tier 1 (Strategic)</h5>
+        {(partnerSARules.tier1 || []).map((item, i) => (
+          <EditableListItem key={i} value={item} onChange={(v) => updatePartnerSARulesList('tier1', i, v)} onDelete={() => deletePartnerSARulesListItem('tier1', i)} color={colors.accent} />
+        ))}
+        <AddItemButton onClick={() => addPartnerSARulesListItem('tier1')} label="Add" />
+      </Card>
+      <Card style={{ borderTop: `4px solid ${colors.success}` }}>
+        <h5 style={{ fontSize: '13px', fontWeight: '600', color: colors.success, marginBottom: '10px' }}>Tier 2 (Qualified)</h5>
+        {(partnerSARules.tier2 || []).map((item, i) => (
+          <EditableListItem key={i} value={item} onChange={(v) => updatePartnerSARulesList('tier2', i, v)} onDelete={() => deletePartnerSARulesListItem('tier2', i)} color={colors.success} />
+        ))}
+        <AddItemButton onClick={() => addPartnerSARulesListItem('tier2')} label="Add" />
+      </Card>
+      <Card style={{ borderTop: `4px solid ${colors.warning}` }}>
+        <h5 style={{ fontSize: '13px', fontWeight: '600', color: colors.warning, marginBottom: '10px' }}>Tier 3 (Evaluation)</h5>
+        {(partnerSARules.tier3 || []).map((item, i) => (
+          <EditableListItem key={i} value={item} onChange={(v) => updatePartnerSARulesList('tier3', i, v)} onDelete={() => deletePartnerSARulesListItem('tier3', i)} color={colors.warning} />
+        ))}
+        <AddItemButton onClick={() => addPartnerSARulesListItem('tier3')} label="Add" />
+      </Card>
+    </div>
+    <h4 style={{ fontSize: '16px', fontWeight: '600', color: colors.text, marginBottom: '12px' }}>Deliverable Categories</h4>
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
+      <Card>
+        <h5 style={{ fontSize: '13px', fontWeight: '600', color: colors.text, marginBottom: '10px' }}>Incubation</h5>
+        {(partnerSARules.incubationDeliverables || []).map((item, i) => (
+          <EditableListItem key={i} value={item} onChange={(v) => updatePartnerSARulesList('incubationDeliverables', i, v)} onDelete={() => deletePartnerSARulesListItem('incubationDeliverables', i)} color={colors.info} />
+        ))}
+        <AddItemButton onClick={() => addPartnerSARulesListItem('incubationDeliverables')} label="Add" />
+      </Card>
+      <Card>
+        <h5 style={{ fontSize: '13px', fontWeight: '600', color: colors.text, marginBottom: '10px' }}>Co-sell</h5>
+        {(partnerSARules.cosellDeliverables || []).map((item, i) => (
+          <EditableListItem key={i} value={item} onChange={(v) => updatePartnerSARulesList('cosellDeliverables', i, v)} onDelete={() => deletePartnerSARulesListItem('cosellDeliverables', i)} color={colors.info} />
+        ))}
+        <AddItemButton onClick={() => addPartnerSARulesListItem('cosellDeliverables')} label="Add" />
+      </Card>
+      <Card>
+        <h5 style={{ fontSize: '13px', fontWeight: '600', color: colors.text, marginBottom: '10px' }}>Hyperscaler-specific</h5>
+        {(partnerSARules.hyperscalerDeliverables || []).map((item, i) => (
+          <EditableListItem key={i} value={item} onChange={(v) => updatePartnerSARulesList('hyperscalerDeliverables', i, v)} onDelete={() => deletePartnerSARulesListItem('hyperscalerDeliverables', i)} color={colors.info} />
+        ))}
+        <AddItemButton onClick={() => addPartnerSARulesListItem('hyperscalerDeliverables')} label="Add" />
+      </Card>
+      <Card>
+        <h5 style={{ fontSize: '13px', fontWeight: '600', color: colors.text, marginBottom: '10px' }}>Tech partnership</h5>
+        {(partnerSARules.techPartnershipDeliverables || []).map((item, i) => (
+          <EditableListItem key={i} value={item} onChange={(v) => updatePartnerSARulesList('techPartnershipDeliverables', i, v)} onDelete={() => deletePartnerSARulesListItem('techPartnershipDeliverables', i)} color={colors.info} />
+        ))}
+        <AddItemButton onClick={() => addPartnerSARulesListItem('techPartnershipDeliverables')} label="Add" />
+      </Card>
+    </div>
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
+      <Card style={{ borderLeft: `4px solid ${colors.success}` }}>
+        <h5 style={{ fontSize: '14px', fontWeight: '600', color: colors.success, marginBottom: '10px' }}>Partner SA Owns</h5>
+        {(partnerSARules.partnerSAOwns || []).map((item, i) => (
+          <EditableListItem key={i} value={item} onChange={(v) => updatePartnerSARulesList('partnerSAOwns', i, v)} onDelete={() => deletePartnerSARulesListItem('partnerSAOwns', i)} color={colors.success} />
+        ))}
+        <AddItemButton onClick={() => addPartnerSARulesListItem('partnerSAOwns')} label="Add" />
+      </Card>
+      <Card style={{ borderLeft: `4px solid ${colors.accent}` }}>
+        <h5 style={{ fontSize: '14px', fontWeight: '600', color: colors.accent, marginBottom: '10px' }}>Partner Managers Own</h5>
+        {(partnerSARules.partnerManagersOwn || []).map((item, i) => (
+          <EditableListItem key={i} value={item} onChange={(v) => updatePartnerSARulesList('partnerManagersOwn', i, v)} onDelete={() => deletePartnerSARulesListItem('partnerManagersOwn', i)} color={colors.accent} />
+        ))}
+        <AddItemButton onClick={() => addPartnerSARulesListItem('partnerManagersOwn')} label="Add" />
+      </Card>
+    </div>
+    <Card style={{ marginBottom: '20px', borderLeft: `4px solid ${colors.warning}` }}>
+      <h5 style={{ fontSize: '14px', fontWeight: '600', color: colors.warning, marginBottom: '10px' }}>Considerations</h5>
+      {(partnerSARules.currentConstraints || []).map((item, i) => (
+        <EditableListItem key={i} value={item} onChange={(v) => updatePartnerSARulesList('currentConstraints', i, v)} onDelete={() => deletePartnerSARulesListItem('currentConstraints', i)} color={colors.warning} />
+      ))}
+      <AddItemButton onClick={() => addPartnerSARulesListItem('currentConstraints')} label="Add" />
+    </Card>
+    <Card style={{ borderLeft: `4px solid ${colors.danger}` }}>
+      <h5 style={{ fontSize: '14px', fontWeight: '600', color: colors.danger, marginBottom: '10px' }}>Guard Rails—What SA Won&apos;t Support</h5>
+      {(partnerSARules.guardRails || []).map((item, i) => (
+        <EditableListItem key={i} value={item} onChange={(v) => updatePartnerSARulesList('guardRails', i, v)} onDelete={() => deletePartnerSARulesListItem('guardRails', i)} color={colors.danger} />
+      ))}
+      <AddItemButton onClick={() => addPartnerSARulesListItem('guardRails')} label="Add" />
+    </Card>
+  </div>
+);
 
 // Hiring & Team Design Section
 const HiringTeamDesignSection = () => {
@@ -740,16 +1472,15 @@ const HiringTeamDesignSection = () => {
 
   const [saProfile, setSaProfile] = useLocalStorage('leadershipPlaybook_saProfile', {
     technicalDepth: [
-      'Has shipped production software or built complex solutions',
-      'Can code or whiteboard system design',
-      'Experience with AI/ML, enterprise software, or content generation tools',
-      'Security certification or willingness to pursue (Q1 program)'
+      'Knowledge and expertise in AI/ML products and use cases',
+      'Process design—ability to map workflows, integrations, and solution architecture',
+      'Aptitude for learning technology quickly; less focus on building production software'
     ],
     gtmImpact: [
-      '3+ years customer-facing technical role (SE, SA, DevRel)',
-      'Track record driving complex POCs and trials',
-      'Experience in enterprise sales motion',
-      'Can connect technical issues to business objectives'
+      'Comfort and credibility in customer-facing technical roles (SE, SA, DevRel)—earns trust with technical and business stakeholders',
+      'Drives complex POCs and trials to closure—ownership mindset',
+      'Navigates enterprise sales motion—understands how deals move and who to align',
+      'Connects technical topics to business objectives—translates for execs and practitioners'
     ],
     growthPotential: [
       'Consultative mindset—diagnoses before prescribing',
@@ -772,10 +1503,10 @@ const HiringTeamDesignSection = () => {
       'Need better onboarding for new SA hires'
     ],
     external: [
-      'Backfill positions (Harry, Hojoon replacements) tied to financial year planning',
-      'Net new headcount impacts forecasting/budgeting',
-      'Employee acquisition costs plus 20% tax burden factor',
-      'Target February timeline for West Coast SA leader position'
+      'Backfill and net-new headcount tied to planning and budgeting',
+      'Net new headcount impacts forecasting and resourcing',
+      'Employee acquisition costs plus tax burden factor into planning',
+      'West Coast SA leader role in scope—prioritized with backfill'
     ]
   });
 
@@ -784,19 +1515,19 @@ const HiringTeamDesignSection = () => {
       'Document "How the best SA\'s work" for team replication—systematic processes vs ad-hoc execution',
       'Preserve collaborative working style: the best SAs can run deals soup-to-nuts',
       'Maintain individual working styles: some SAs are technical builders, others more business-forward',
-      'Keep 40-hour work week maximum—additional headcount for overages, not burnout'
+      'Values sustainable pace—additional headcount for overages, not burnout'
     ],
     scalingCulture: [
-      'Create systematic content sharing: weekly demo highlights by industry (Greta leading)',
-      'Develop special skills that differentiate from AEs: product knowledge, buyer personas, competitive landscape',
-      'Foster continuous learning: attend all CS/sales enablement sessions, follow with team check-ins',
+      'Systematic content sharing: demo highlights by industry',
+      'Develop skills that differentiate from AEs: product knowledge, buyer personas, competitive landscape',
+      'Foster continuous learning: attend CS/sales enablement sessions, follow with team check-ins',
       'Build muscle memory for successful deal closure: document exit gates and tactics, make them accessible'
     ],
     onboarding: [
-      'Better onboarding for new SA hires—move beyond "tech support" role',
-      'Enable business acumen alongside technical skills from day one',
-      'Shadow calls with 15-minute debrief sessions to accelerate learning',
-      '10 post-mortems per quarter with real-time feedback on actual deals'
+      'Onboarding that moves new SAs beyond "tech support" into full ownership',
+      'Enable business acumen alongside technical skills from the start',
+      'Shadow calls with structured debriefs to accelerate learning',
+      'Regular post-mortems with real-time feedback on actual deals'
     ],
     teamValues: [
       'Maintain low ego, high curiosity culture—admits mistakes, asks questions',
@@ -869,10 +1600,22 @@ const HiringTeamDesignSection = () => {
     }));
   };
 
+  const defaultHireFastSteps = [
+    { title: 'Identify the right candidate', description: 'Define who you need (profile, skills, culture). Source from network, referrals, and targeted outreach—prioritize people who already run POCs and translate tech to business.' },
+    { title: 'Open the conversation', description: 'First touch: make it about them. Share why the role matters, what the team is building, and leave space for their questions. No spray-and-pray.' },
+    { title: 'Learn what they want', description: 'Discovery before pitch. What are they optimizing for? Growth, ownership, team, mission? Listen more than you talk so you can align and test fit.' },
+    { title: 'Test for fit', description: 'See them in motion: messy case study, real scenario, or paired exercise with a future teammate. Assess technical depth, GTM instincts, and how they show up under ambiguity.' },
+    { title: 'Close and bring them in', description: 'Move fast when it\'s a yes. Clear offer, explicit expectations, and structured onboarding so day one feels intentional—not "shadow and figure it out."' }
+  ];
+  const [hireFastSteps, setHireFastSteps] = useLocalStorage('leadershipPlaybook_hireFastSteps', defaultHireFastSteps);
+  const updateHireFastStep = (index, field, value) => {
+    setHireFastSteps(prev => prev.map((s, i) => i === index ? { ...s, [field]: value } : s));
+  };
+
   return (
     <div>
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', flexWrap: 'wrap' }}>
         <button
           onClick={() => setActiveTab('profile')}
           style={{
@@ -887,6 +1630,21 @@ const HiringTeamDesignSection = () => {
           }}
         >
           SA Profile
+        </button>
+        <button
+          onClick={() => setActiveTab('hireFast')}
+          style={{
+            padding: '10px 20px',
+            borderRadius: '100px',
+            border: `2px solid ${activeTab === 'hireFast' ? colors.info : colors.border}`,
+            backgroundColor: activeTab === 'hireFast' ? colors.info : 'white',
+            color: activeTab === 'hireFast' ? 'white' : colors.text,
+            fontSize: '14px',
+            fontWeight: '500',
+            cursor: 'pointer'
+          }}
+        >
+          How to Hire Fast
         </button>
         <button
           onClick={() => setActiveTab('balance')}
@@ -940,10 +1698,11 @@ const HiringTeamDesignSection = () => {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '24px' }}>
             {Object.entries(saProfile).map(([key, items], idx) => {
               const colors_map = [colors.accent, colors.purple, colors.success];
+              const cardTitle = key === 'growthPotential' ? 'Business Acumen and Persona for Success' : key === 'gtmImpact' ? 'GTM Experience' : key.replace(/([A-Z])/g, ' $1').trim();
               return (
                 <Card key={key} style={{ borderTop: `3px solid ${colors_map[idx]}` }}>
-                  <h3 style={{ fontSize: '16px', fontWeight: '600', color: colors.text, marginBottom: '12px', textTransform: 'capitalize' }}>
-                    {key.replace(/([A-Z])/g, ' $1').trim()}
+                  <h3 style={{ fontSize: '16px', fontWeight: '600', color: colors.text, marginBottom: '12px', textTransform: (key === 'growthPotential' || key === 'gtmImpact') ? 'none' : 'capitalize' }}>
+                    {cardTitle}
                   </h3>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {items.map((item, i) => (
@@ -988,9 +1747,59 @@ const HiringTeamDesignSection = () => {
         </div>
       )}
 
+      {activeTab === 'hireFast' && (
+        <div>
+          <h3 style={{ fontSize: '18px', fontWeight: '600', color: colors.text, marginBottom: '8px' }}>How to Hire Fast</h3>
+          <p style={{ fontSize: '14px', color: colors.textMuted, marginBottom: '24px', lineHeight: 1.5 }}>A repeatable process to identify, engage, and close the right SA—without losing speed or culture fit.</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+            {(hireFastSteps || defaultHireFastSteps).map((step, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'stretch', gap: '0', marginBottom: i < (hireFastSteps || defaultHireFastSteps).length - 1 ? '0' : '0' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
+                  <div style={{
+                    width: '44px',
+                    height: '44px',
+                    borderRadius: '50%',
+                    backgroundColor: colors.info,
+                    color: 'white',
+                    fontSize: '16px',
+                    fontWeight: '700',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    border: `3px solid ${colors.bg}`,
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
+                  }}>
+                    {i + 1}
+                  </div>
+                  {i < (hireFastSteps || defaultHireFastSteps).length - 1 && (
+                    <div style={{ width: '2px', flex: 1, minHeight: '24px', backgroundColor: colors.info, opacity: 0.4, marginTop: '8px' }} />
+                  )}
+                </div>
+                <div style={{ flex: 1, marginLeft: '20px', paddingBottom: i < (hireFastSteps || defaultHireFastSteps).length - 1 ? '28px' : '0' }}>
+                  <Card style={{ borderLeft: `4px solid ${colors.info}`, padding: '16px 20px' }}>
+                    <EditableText
+                      value={step.title}
+                      onChange={(v) => updateHireFastStep(i, 'title', v)}
+                      style={{ fontSize: '16px', fontWeight: '600', color: colors.text, marginBottom: '8px', display: 'block' }}
+                    />
+                    <EditableText
+                      value={step.description}
+                      onChange={(v) => updateHireFastStep(i, 'description', v)}
+                      style={{ fontSize: '14px', color: colors.textSecondary, lineHeight: 1.6 }}
+                      multiline
+                    />
+                  </Card>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {activeTab === 'balance' && (
         <Card>
-          <h3 style={{ fontSize: '18px', fontWeight: '600', color: colors.text, marginBottom: '12px' }}>How I Balance Technical Depth, GTM Impact & Growth Potential</h3>
+          <h3 style={{ fontSize: '18px', fontWeight: '600', color: colors.text, marginBottom: '12px' }}>How I Balance Technical Depth, GTM Experience & Business Acumen and Persona for Success</h3>
           <p style={{ fontSize: '15px', color: colors.textSecondary, lineHeight: '1.7', margin: 0 }}>
             <EditableText
               value={balance}
@@ -1239,8 +2048,8 @@ const GTMImpactSection = () => {
 
   const [presaleImpact, setPresaleImpact] = useLocalStorage('leadershipPlaybook_presaleImpact', [
     'Drive structured, high-quality POCs that convert (current POCs are generic)',
-    'Help AEs connect technical pain points to business objectives',
-    'Provide technical storytelling AEs currently lack',
+    'Help AEs connect technical priorities to business objectives',
+    'Provide technical storytelling AEs can grow into',
     'Build trust with developers who are highly skeptical of "sales"',
     'Pricing scoping estimates (no EM involvement in presales)'
   ]);
@@ -1274,90 +2083,6 @@ const GTMImpactSection = () => {
     ]
   });
 
-  const defaultPartnerSARules = {
-    coreMission: 'Enable partners to pitch Writer and co-sell effectively while driving revenue through "Manage and Operate" motions with GSIs.',
-    fourPillars: 'The Partner SA function operates across four key areas: generating validated sales opportunities tied to ROI, building scalable enablement frameworks ("train the trainer" approach), supporting product changes with talk tracks, and providing internal team training.',
-    ecosystemStructure: 'Writer\'s ecosystem spans six partner categories: Infrastructure/Technology partnerships (hyperscalers, security, developer platforms), Product Partners (connectors), Service Providers split between G/SIs for advisory versus manage-and-operate work, Data Licensing partnerships, Strategic embed/OEM relationships, and niche SI/AI native partners including MSPs, BPOs, and agencies.',
-    tier1: [
-      'Active partnerships with revenue commitment, executive sponsorship, and Writer involvement in POC criteria',
-      'Advanced training, sandbox access, POC development support, priority Slack support, joint planning, and call support'
-    ],
-    tier2: [
-      'Official agreements with certifications and specific client opportunities identified',
-      'Standard training, sandbox access, limited weekly technical consultation, documentation, office hours, and call support'
-    ],
-    tier3: [
-      'Early-stage discussions with use cases identified',
-      'Intro workshops, public docs, monthly webinars, and basic demo access'
-    ],
-    incubationDeliverables: [
-      'Market/product/competition enablement',
-      'Joint solution builds for reusable assets',
-      'Joint GTM solution maps',
-      'Quarterly product reviews'
-    ],
-    cosellDeliverables: [
-      'Technical scoping',
-      'Technical support for executive meetings',
-      'Use case workshops',
-      'Joint demo/solution builds',
-      'Escalation paths to product and engineering'
-    ],
-    hyperscalerDeliverables: [
-      'Platform enablement',
-      'Technical discussions on model integration and compliance',
-      'Use case workshops',
-      'Quarterly updates'
-    ],
-    techPartnershipDeliverables: [
-      'Demo and enablement',
-      'Customer/use case mapping',
-      'Integration discovery (MCP, API, OEM, Embed)',
-      'Quarterly reviews'
-    ],
-    partnerSAOwns: [
-      'Enablement',
-      'Sandbox access, office hours during active opportunities',
-      'Solution process mapping',
-      'Reusable demo assets',
-      'Thought leadership on AI scaling'
-    ],
-    partnerManagersOwn: [
-      'Onboarding',
-      'Engagement management',
-      'ROI/business case development',
-      'Relationship management',
-      'Expectation setting',
-      'Cross-functional alignment'
-    ],
-    currentConstraints: [
-      'Only two Partner SAs supporting all engagements',
-      'Longer sales cycles compared to direct sales',
-      'Different engagement patterns across partner types (Data Partners, Hyperscalers, etc.)'
-    ],
-    guardRails: [
-      'Fishing expeditions without specific opportunities',
-      'Training without business justification',
-      'Support for non-partners',
-      'Generic capability presentations',
-      'Context-free competitive intelligence requests',
-      'Support for non-engaged clients on AI Studio/Agent Builder'
-    ]
-  };
-
-  const [partnerSARules, setPartnerSARules] = useLocalStorage('leadershipPlaybook_partnerSARules', defaultPartnerSARules);
-
-  const updatePartnerSARules = (key, value) => setPartnerSARules(prev => ({ ...prev, [key]: value }));
-  const updatePartnerSARulesList = (key, index, value) =>
-    setPartnerSARules(prev => ({
-      ...prev,
-      [key]: prev[key].map((item, i) => (i === index ? value : item))
-    }));
-  const addPartnerSARulesListItem = (key) =>
-    setPartnerSARules(prev => ({ ...prev, [key]: [...(prev[key] || []), 'New item - click to edit'] }));
-  const deletePartnerSARulesListItem = (key, index) =>
-    setPartnerSARules(prev => ({ ...prev, [key]: prev[key].filter((_, i) => i !== index) }));
-
   return (
     <div>
       {/* Tabs */}
@@ -1365,8 +2090,7 @@ const GTMImpactSection = () => {
         {[
           { id: 'presale', label: 'Pre-Sale Impact', color: colors.accent },
           { id: 'postsale', label: 'Post-Sale Impact', color: colors.success },
-          { id: 'adaptation', label: 'Strategy Adaptation', color: colors.purple },
-          { id: 'partnerships', label: 'Partnerships', color: colors.info }
+          { id: 'adaptation', label: 'Strategy Adaptation', color: colors.purple }
         ].map(tab => (
           <button
             key={tab.id}
@@ -1524,213 +2248,6 @@ const GTMImpactSection = () => {
         </div>
       )}
 
-      {activeTab === 'partnerships' && (
-        <div>
-          {/* V1 Functional Org / Ecosystem chart */}
-          <Card style={{ marginBottom: '28px', overflow: 'hidden' }}>
-            <h3 style={{ fontSize: '18px', fontWeight: '600', color: colors.text, marginBottom: '10px' }}>V1 - Functional Org: Focused on impact</h3>
-            <p style={{ fontSize: '14px', color: colors.textSecondary, lineHeight: 1.6, marginBottom: '20px', maxWidth: '720px' }}>
-              To build an effective team, look across the partner types that will help Writer grow from a product differentiation perspective and from deployment & revenue. The entire ecosystem depends on global partner enablement—a clear partner program and partner marketing delivered in scalable ways.
-            </p>
-            <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
-              <div style={{
-                flex: '1 1 600px',
-                minWidth: 0,
-                padding: '20px',
-                borderRadius: '12px',
-                border: `2px dashed ${colors.purple}`,
-                backgroundColor: colors.pink ? colors.pink + '08' : 'rgba(245,196,216,0.08)'
-              }}>
-                <svg viewBox="0 0 920 300" style={{ width: '100%', height: 'auto', display: 'block' }} preserveAspectRatio="xMidYMid meet">
-                  <defs>
-                    <filter id="partnerNodeShadow" x="-10%" y="-10%" width="120%" height="120%">
-                      <feDropShadow dx="0" dy="1" stdDeviation="1" floodOpacity="0.15" />
-                    </filter>
-                  </defs>
-                  {/* Connector lines: root to L1, L1 to L2, L2 to L3 */}
-                  <g stroke={colors.gray300} strokeWidth="1.5" fill="none">
-                    <path d="M 460 52 v 18 M 460 70 H 110 V 88 M 460 70 H 460 V 88 M 460 70 H 720 V 88" />
-                    <path d="M 110 124 H 100 V 134 M 110 124 H 260 V 134" />
-                    <path d="M 100 134 V 166 M 100 166 H 70 V 180 M 100 166 H 210 V 180" />
-                    <path d="M 460 124 H 400 V 134 M 460 124 H 580 V 134" />
-                    <path d="M 400 134 V 180" />
-                    <path d="M 580 134 V 180" />
-                    <path d="M 720 124 H 630 V 134 M 720 124 H 765 V 134 M 720 124 H 884 V 134" />
-                  </g>
-                  {/* Root */}
-                  <rect x="330" y="8" width="260" height="44" rx="8" fill={colors.info} filter="url(#partnerNodeShadow)" />
-                  <text x="460" y="35" textAnchor="middle" fill="#fff" fontSize="13" fontWeight="600" fontFamily="Inter, sans-serif">Global Partnerships Writer Ecosystem</text>
-                  {/* L1 */}
-                  <rect x="40" y="88" width="140" height="36" rx="6" fill={colors.info} />
-                  <text x="110" y="110" textAnchor="middle" fill="#fff" fontSize="11" fontWeight="600" fontFamily="Inter, sans-serif">Service Providers</text>
-                  <rect x="380" y="88" width="160" height="36" rx="6" fill={colors.info} />
-                  <text x="460" y="110" textAnchor="middle" fill="#fff" fontSize="11" fontWeight="600" fontFamily="Inter, sans-serif">Technology Partnerships</text>
-                  <rect x="660" y="88" width="120" height="36" rx="6" fill={colors.info} />
-                  <text x="720" y="110" textAnchor="middle" fill="#fff" fontSize="11" fontWeight="600" fontFamily="Inter, sans-serif">Infrastructure</text>
-                  {/* L2 - Service */}
-                  <rect x="20" y="134" width="160" height="32" rx="6" fill={colors.info} />
-                  <text x="100" y="154" textAnchor="middle" fill="#fff" fontSize="10" fontWeight="500" fontFamily="Inter, sans-serif">G/SIs (Manage &amp; Operate)</text>
-                  <rect x="200" y="134" width="120" height="32" rx="6" fill={colors.info} />
-                  <text x="260" y="154" textAnchor="middle" fill="#fff" fontSize="10" fontWeight="500" fontFamily="Inter, sans-serif">G/SIs (Advisories)</text>
-                  {/* L3 - Service */}
-                  <rect x="10" y="180" width="120" height="28" rx="6" fill={colors.info} />
-                  <text x="70" y="198" textAnchor="middle" fill="#fff" fontSize="9" fontWeight="500" fontFamily="Inter, sans-serif">Niche SI / AI Natives</text>
-                  <rect x="140" y="180" width="140" height="28" rx="6" fill={colors.info} />
-                  <text x="210" y="198" textAnchor="middle" fill="#fff" fontSize="9" fontWeight="500" fontFamily="Inter, sans-serif">MSP / Outsourcers (BPO; Agencies)</text>
-                  {/* L2 - Tech */}
-                  <rect x="320" y="134" width="160" height="32" rx="6" fill={colors.info} />
-                  <text x="400" y="154" textAnchor="middle" fill="#fff" fontSize="10" fontWeight="500" fontFamily="Inter, sans-serif">Product Partners (Connectors)</text>
-                  <rect x="500" y="134" width="160" height="32" rx="6" fill={colors.info} />
-                  <text x="580" y="154" textAnchor="middle" fill="#fff" fontSize="10" fontWeight="500" fontFamily="Inter, sans-serif">Data Licensing &amp; Partnerships</text>
-                  {/* L3 - Tech */}
-                  <rect x="350" y="180" width="120" height="28" rx="6" fill={colors.info} />
-                  <text x="410" y="198" textAnchor="middle" fill="#fff" fontSize="9" fontWeight="500" fontFamily="Inter, sans-serif">Strategics (Embed/OEM)</text>
-                  <rect x="530" y="180" width="80" height="28" rx="6" fill={colors.info} />
-                  <text x="570" y="198" textAnchor="middle" fill="#fff" fontSize="9" fontWeight="500" fontFamily="Inter, sans-serif">Security</text>
-                  {/* L2 - Infrastructure */}
-                  <rect x="580" y="134" width="100" height="32" rx="6" fill={colors.info} />
-                  <text x="630" y="154" textAnchor="middle" fill="#fff" fontSize="10" fontWeight="500" fontFamily="Inter, sans-serif">Hyperscalers</text>
-                  <rect x="700" y="134" width="130" height="32" rx="6" fill={colors.info} />
-                  <text x="765" y="154" textAnchor="middle" fill="#fff" fontSize="10" fontWeight="500" fontFamily="Inter, sans-serif">Developer Platforms</text>
-                  <rect x="848" y="134" width="72" height="32" rx="6" fill={colors.info} />
-                  <text x="884" y="154" textAnchor="middle" fill="#fff" fontSize="9" fontWeight="500" fontFamily="Inter, sans-serif">Hardware (Future)</text>
-                </svg>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', flexShrink: 0, width: '200px' }}>
-                {[
-                  { label: 'Partner Enablement', highlight: false },
-                  { label: 'Partner Program + Incentives', highlight: false },
-                  { label: 'Partner Tools (Portal, LMS, SFDC)', highlight: false },
-                  { label: 'Partner Marketing', highlight: true },
-                  { label: 'Partner Sales', highlight: true, dashed: true }
-                ].map((item, idx) => (
-                  <div
-                    key={idx}
-                    style={{
-                      padding: '12px 14px',
-                      borderRadius: '8px',
-                      border: item.dashed ? `2px dashed ${colors.border}` : `1px solid ${colors.border}`,
-                      backgroundColor: item.highlight ? (colors.pink ? colors.pink + '18' : 'rgba(245,196,216,0.12)') : colors.surface,
-                      fontSize: '13px',
-                      fontWeight: '500',
-                      color: colors.text
-                    }}
-                  >
-                    {item.label}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </Card>
-
-          <h3 style={{ fontSize: '20px', fontWeight: '600', color: colors.text, marginBottom: '20px' }}>Partner SA Rules of Engagement</h3>
-
-          <Card style={{ marginBottom: '20px', backgroundColor: colors.info + '10', borderLeft: `4px solid ${colors.info}` }}>
-            <h4 style={{ fontSize: '14px', fontWeight: '600', color: colors.textMuted, marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Core Mission</h4>
-            <EditableText value={partnerSARules.coreMission} onChange={(v) => updatePartnerSARules('coreMission', v)} style={{ fontSize: '15px', color: colors.textSecondary, lineHeight: 1.6 }} multiline />
-          </Card>
-
-          <Card style={{ marginBottom: '20px' }}>
-            <h4 style={{ fontSize: '14px', fontWeight: '600', color: colors.text, marginBottom: '10px' }}>Four Strategic Pillars</h4>
-            <EditableText value={partnerSARules.fourPillars} onChange={(v) => updatePartnerSARules('fourPillars', v)} style={{ fontSize: '14px', color: colors.textSecondary, lineHeight: 1.6 }} multiline />
-          </Card>
-
-          <Card style={{ marginBottom: '20px' }}>
-            <h4 style={{ fontSize: '14px', fontWeight: '600', color: colors.text, marginBottom: '10px' }}>Partner Ecosystem Structure</h4>
-            <EditableText value={partnerSARules.ecosystemStructure} onChange={(v) => updatePartnerSARules('ecosystemStructure', v)} style={{ fontSize: '14px', color: colors.textSecondary, lineHeight: 1.6 }} multiline />
-          </Card>
-
-          <h4 style={{ fontSize: '16px', fontWeight: '600', color: colors.text, marginBottom: '12px' }}>Three-Tier Partner Classification</h4>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '24px' }}>
-            <Card style={{ borderTop: `4px solid ${colors.accent}` }}>
-              <h5 style={{ fontSize: '13px', fontWeight: '600', color: colors.accent, marginBottom: '10px' }}>Tier 1 (Strategic)</h5>
-              {(partnerSARules.tier1 || []).map((item, i) => (
-                <EditableListItem key={i} value={item} onChange={(v) => updatePartnerSARulesList('tier1', i, v)} onDelete={() => deletePartnerSARulesListItem('tier1', i)} color={colors.accent} />
-              ))}
-              <AddItemButton onClick={() => addPartnerSARulesListItem('tier1')} label="Add" />
-            </Card>
-            <Card style={{ borderTop: `4px solid ${colors.success}` }}>
-              <h5 style={{ fontSize: '13px', fontWeight: '600', color: colors.success, marginBottom: '10px' }}>Tier 2 (Qualified)</h5>
-              {(partnerSARules.tier2 || []).map((item, i) => (
-                <EditableListItem key={i} value={item} onChange={(v) => updatePartnerSARulesList('tier2', i, v)} onDelete={() => deletePartnerSARulesListItem('tier2', i)} color={colors.success} />
-              ))}
-              <AddItemButton onClick={() => addPartnerSARulesListItem('tier2')} label="Add" />
-            </Card>
-            <Card style={{ borderTop: `4px solid ${colors.warning}` }}>
-              <h5 style={{ fontSize: '13px', fontWeight: '600', color: colors.warning, marginBottom: '10px' }}>Tier 3 (Evaluation)</h5>
-              {(partnerSARules.tier3 || []).map((item, i) => (
-                <EditableListItem key={i} value={item} onChange={(v) => updatePartnerSARulesList('tier3', i, v)} onDelete={() => deletePartnerSARulesListItem('tier3', i)} color={colors.warning} />
-              ))}
-              <AddItemButton onClick={() => addPartnerSARulesListItem('tier3')} label="Add" />
-            </Card>
-          </div>
-
-          <h4 style={{ fontSize: '16px', fontWeight: '600', color: colors.text, marginBottom: '12px' }}>Deliverable Categories</h4>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
-            <Card>
-              <h5 style={{ fontSize: '13px', fontWeight: '600', color: colors.text, marginBottom: '10px' }}>Incubation</h5>
-              {(partnerSARules.incubationDeliverables || []).map((item, i) => (
-                <EditableListItem key={i} value={item} onChange={(v) => updatePartnerSARulesList('incubationDeliverables', i, v)} onDelete={() => deletePartnerSARulesListItem('incubationDeliverables', i)} color={colors.info} />
-              ))}
-              <AddItemButton onClick={() => addPartnerSARulesListItem('incubationDeliverables')} label="Add" />
-            </Card>
-            <Card>
-              <h5 style={{ fontSize: '13px', fontWeight: '600', color: colors.text, marginBottom: '10px' }}>Co-sell</h5>
-              {(partnerSARules.cosellDeliverables || []).map((item, i) => (
-                <EditableListItem key={i} value={item} onChange={(v) => updatePartnerSARulesList('cosellDeliverables', i, v)} onDelete={() => deletePartnerSARulesListItem('cosellDeliverables', i)} color={colors.info} />
-              ))}
-              <AddItemButton onClick={() => addPartnerSARulesListItem('cosellDeliverables')} label="Add" />
-            </Card>
-            <Card>
-              <h5 style={{ fontSize: '13px', fontWeight: '600', color: colors.text, marginBottom: '10px' }}>Hyperscaler-specific</h5>
-              {(partnerSARules.hyperscalerDeliverables || []).map((item, i) => (
-                <EditableListItem key={i} value={item} onChange={(v) => updatePartnerSARulesList('hyperscalerDeliverables', i, v)} onDelete={() => deletePartnerSARulesListItem('hyperscalerDeliverables', i)} color={colors.info} />
-              ))}
-              <AddItemButton onClick={() => addPartnerSARulesListItem('hyperscalerDeliverables')} label="Add" />
-            </Card>
-            <Card>
-              <h5 style={{ fontSize: '13px', fontWeight: '600', color: colors.text, marginBottom: '10px' }}>Tech partnership</h5>
-              {(partnerSARules.techPartnershipDeliverables || []).map((item, i) => (
-                <EditableListItem key={i} value={item} onChange={(v) => updatePartnerSARulesList('techPartnershipDeliverables', i, v)} onDelete={() => deletePartnerSARulesListItem('techPartnershipDeliverables', i)} color={colors.info} />
-              ))}
-              <AddItemButton onClick={() => addPartnerSARulesListItem('techPartnershipDeliverables')} label="Add" />
-            </Card>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
-            <Card style={{ borderLeft: `4px solid ${colors.success}` }}>
-              <h5 style={{ fontSize: '14px', fontWeight: '600', color: colors.success, marginBottom: '10px' }}>Partner SA Owns</h5>
-              {(partnerSARules.partnerSAOwns || []).map((item, i) => (
-                <EditableListItem key={i} value={item} onChange={(v) => updatePartnerSARulesList('partnerSAOwns', i, v)} onDelete={() => deletePartnerSARulesListItem('partnerSAOwns', i)} color={colors.success} />
-              ))}
-              <AddItemButton onClick={() => addPartnerSARulesListItem('partnerSAOwns')} label="Add" />
-            </Card>
-            <Card style={{ borderLeft: `4px solid ${colors.accent}` }}>
-              <h5 style={{ fontSize: '14px', fontWeight: '600', color: colors.accent, marginBottom: '10px' }}>Partner Managers Own</h5>
-              {(partnerSARules.partnerManagersOwn || []).map((item, i) => (
-                <EditableListItem key={i} value={item} onChange={(v) => updatePartnerSARulesList('partnerManagersOwn', i, v)} onDelete={() => deletePartnerSARulesListItem('partnerManagersOwn', i)} color={colors.accent} />
-              ))}
-              <AddItemButton onClick={() => addPartnerSARulesListItem('partnerManagersOwn')} label="Add" />
-            </Card>
-          </div>
-
-          <Card style={{ marginBottom: '20px', borderLeft: `4px solid ${colors.warning}` }}>
-            <h5 style={{ fontSize: '14px', fontWeight: '600', color: colors.warning, marginBottom: '10px' }}>Current Constraints</h5>
-            {(partnerSARules.currentConstraints || []).map((item, i) => (
-              <EditableListItem key={i} value={item} onChange={(v) => updatePartnerSARulesList('currentConstraints', i, v)} onDelete={() => deletePartnerSARulesListItem('currentConstraints', i)} color={colors.warning} />
-            ))}
-            <AddItemButton onClick={() => addPartnerSARulesListItem('currentConstraints')} label="Add" />
-          </Card>
-
-          <Card style={{ borderLeft: `4px solid ${colors.danger}` }}>
-            <h5 style={{ fontSize: '14px', fontWeight: '600', color: colors.danger, marginBottom: '10px' }}>Guard Rails—What SA Won&apos;t Support</h5>
-            {(partnerSARules.guardRails || []).map((item, i) => (
-              <EditableListItem key={i} value={item} onChange={(v) => updatePartnerSARulesList('guardRails', i, v)} onDelete={() => deletePartnerSARulesListItem('guardRails', i)} color={colors.danger} />
-            ))}
-            <AddItemButton onClick={() => addPartnerSARulesListItem('guardRails')} label="Add" />
-          </Card>
-        </div>
-      )}
     </div>
   );
 };
@@ -1744,8 +2261,8 @@ const OperatingCoachingSection = () => {
     leading: [
       { name: 'POC conversion rate', target: 'TBD baseline, then +X%', status: 'unknown' },
       { name: 'Check-ins per trial', target: '3+', status: 'bad', note: '4 months ago: zero check-ins' },
-      { name: 'Feature adoption rates', target: 'Rules >50%, MCPS >40%, Composer >30%', status: 'bad' },
-      { name: 'SA utilization / capacity', target: 'Quantify the 50+ trials problem', status: 'unknown' }
+      { name: 'Feature adoption rates', target: 'Writer Agent, Guardrails, AI Studio, Knowledge Graph etc', status: 'bad' },
+      { name: 'SA utilization / capacity', target: 'Quantify the 50+ trials scope', status: 'unknown' }
     ],
     lagging: [
       { name: 'Deal win rate with SA involvement', target: 'TBD', status: 'unknown' },
@@ -2203,9 +2720,9 @@ const splitPhaseTitle = (title) => {
 };
 
 // Exponential growth curve: flat at start, steep at end (0 → 100 over 30 days)
-const valueAtDay = (day) => 100 * (Math.exp(3 * day / 30) - 1) / (Math.exp(3) - 1);
+const valueAtDay = (day, maxDays = 30) => 100 * (Math.exp(3 * day / maxDays) - 1) / (Math.exp(3) - 1);
 
-const InteractiveTimeline = ({ phases, activePhase, setActivePhase }) => {
+const InteractiveTimeline = ({ phases, activePhase, setActivePhase, maxDays = 30 }) => {
   const svgRef = useRef(null);
   const containerRef = useRef(null);
   const TIMELINE_HEIGHT = 420;
@@ -2214,15 +2731,19 @@ const InteractiveTimeline = ({ phases, activePhase, setActivePhase }) => {
   useEffect(() => {
     const updateDimensions = () => {
       if (containerRef.current) {
-        setDimensions({
-          width: containerRef.current.offsetWidth,
-          height: TIMELINE_HEIGHT
-        });
+        const w = containerRef.current.offsetWidth;
+        setDimensions({ width: w, height: TIMELINE_HEIGHT });
       }
     };
     updateDimensions();
     window.addEventListener('resize', updateDimensions);
-    return () => window.removeEventListener('resize', updateDimensions);
+    const t1 = setTimeout(updateDimensions, 0);
+    const t2 = setTimeout(updateDimensions, 150);
+    return () => {
+      window.removeEventListener('resize', updateDimensions);
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
   }, []);
 
   useEffect(() => {
@@ -2242,13 +2763,13 @@ const InteractiveTimeline = ({ phases, activePhase, setActivePhase }) => {
     const height = dimensions.height - margin.top - margin.bottom;
 
     const g = svg.append('g').attr('transform', `translate(${margin.left}, ${margin.top})`);
-    const xScale = scaleLinear().domain([0, 30]).range([0, width]);
+    const xScale = scaleLinear().domain([0, maxDays]).range([0, width]);
     const yScale = scaleLinear().domain([0, 100]).range([height, 0]);
 
-    // Curve data: exponential value over days 0–30
+    // Curve data: exponential value over days 0–maxDays
     const curveData = [];
-    for (let d = 0; d <= 30; d += 0.5) {
-      curveData.push({ day: d, value: valueAtDay(d) });
+    for (let d = 0; d <= maxDays; d += (maxDays <= 30 ? 0.5 : 1)) {
+      curveData.push({ day: d, value: valueAtDay(d, maxDays) });
     }
 
     const lineGen = line()
@@ -2281,9 +2802,10 @@ const InteractiveTimeline = ({ phases, activePhase, setActivePhase }) => {
       .text('Value');
 
     // X-axis (Days)
+    const xTickValues = maxDays <= 30 ? [0, 5, 10, 15, 20, 25, 30] : [0, 15, 30, 45, 60, 75, 90];
     const xAxis = axisBottom(xScale)
       .ticks(7)
-      .tickValues([0, 5, 10, 15, 20, 25, 30])
+      .tickValues(xTickValues)
       .tickSizeInner(-height)
       .tickSizeOuter(0);
     g.append('g')
@@ -2304,11 +2826,9 @@ const InteractiveTimeline = ({ phases, activePhase, setActivePhase }) => {
       .text('Days');
 
     // Draw curve in three segments (one per phase) with phase colors
-    const segmentRanges = [
-      [0, 10],
-      [10, 20],
-      [20, 30]
-    ];
+    const segmentRanges = maxDays <= 30
+      ? [[0, 10], [10, 20], [20, 30]]
+      : [[0, 30], [30, 60], [60, 90]];
     segmentRanges.forEach(([start, end], i) => {
       const segmentData = curveData.filter(d => d.day >= start && d.day <= end);
       if (segmentData.length === 0) return;
@@ -2322,18 +2842,18 @@ const InteractiveTimeline = ({ phases, activePhase, setActivePhase }) => {
         .attr('stroke-width', isActive ? 4 : isPast ? 3 : 2)
         .attr('stroke-linecap', 'round')
         .attr('stroke-linejoin', 'round')
-        .attr('opacity', isActive ? 1 : isPast ? 0.85 : 0.5)
+        .attr('opacity', isActive ? 1 : (maxDays > 30 ? 0.9 : (isPast ? 0.85 : 0.5)))
         .style('cursor', 'pointer')
         .style('filter', isActive ? 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))' : 'none')
         .on('click', () => setActivePhase(i));
     });
 
-    // Phase nodes on the curve (mid-phase: 5, 15, 25)
-    const nodeDays = [5, 15, 25];
-    phases.forEach((phase, i) => {
-      const day = nodeDays[i];
+    // Phase nodes on the curve (mid-phase); ensure we have a day for each phase
+    const nodeDays = maxDays <= 30 ? [5, 15, 25] : [15, 45, 75];
+    (phases || []).forEach((phase, i) => {
+      const day = nodeDays[i] != null ? nodeDays[i] : (i + 0.5) * (maxDays / (phases.length || 1));
       const x = xScale(day);
-      const y = yScale(valueAtDay(day));
+      const y = yScale(valueAtDay(day, maxDays));
       const isActive = i === activePhase;
       const isPast = i < activePhase;
       const circleRadius = isActive ? 16 : isPast ? 14 : 12;
@@ -2350,7 +2870,7 @@ const InteractiveTimeline = ({ phases, activePhase, setActivePhase }) => {
       g.append('circle')
         .attr('cx', x).attr('cy', y)
         .attr('r', circleRadius)
-        .attr('fill', isActive || isPast ? phase.color : 'white')
+        .attr('fill', isActive ? phase.color : (isPast ? phase.color : (phase.color + '30')))
         .attr('stroke', phase.color)
         .attr('stroke-width', isActive ? 3 : 2)
         .style('cursor', 'pointer')
@@ -2410,7 +2930,7 @@ const InteractiveTimeline = ({ phases, activePhase, setActivePhase }) => {
       }
     });
 
-  }, [phases, activePhase, dimensions]);
+  }, [phases, activePhase, dimensions, maxDays]);
 
   return (
     <div ref={containerRef} style={{ width: '100%', marginBottom: '32px' }}>
@@ -2423,7 +2943,13 @@ const InteractiveTimeline = ({ phases, activePhase, setActivePhase }) => {
 const First30DaysSection = () => {
   const { isEditMode } = useContext(EditModeContext);
   const [activePhase, setActivePhase] = useState(0);
-  const [timelineTitle, setTimelineTitle] = useLocalStorage('leadershipPlaybook_timelineTitle', 'First 30 Days Timeline');
+  const [timelineTitle, setTimelineTitle] = useLocalStorage('leadershipPlaybook_timelineTitle', '30-60-90 Timeline');
+
+  const [first30PhaseSummary, setFirst30PhaseSummary] = useLocalStorage('leadershipPlaybook_first30PhaseSummary', {
+    days: 'Days 1-30',
+    title: 'Discovery, Design & Launch',
+    goal: 'Establish baseline (team structure, key activities, competitive positioning, capacity, retention), design pilots and prescriptive assets, and operationalize rhythms—so Day 30 outcomes are measurable and repeatable.'
+  });
 
   const defaultPhases30 = [
     {
@@ -2434,14 +2960,14 @@ const First30DaysSection = () => {
       priorities: [
         'Partner SA: Audit all partner-sourced deals; interview 3-5 regional SAs on friction points; document "telephone game" workflow; pull partner vs. direct deal velocity data',
         'Partner Accountability: Create Partner Engagement Scorecard—joint customers identified, discovery calls scheduled, pipeline generated, deals closed; define Tier 1/2/3 expectations (e.g. Tier 1: 2 joint intros/month, quarterly pipeline target)',
-        'Differentiation: Conduct 5 lost-deal interviews (where "just use ChatGPT" killed deals); audit sales collateral for differentiation gaps; build competitive matrix: Writer vs. ChatGPT Enterprise vs. Claude vs. Gemini (governance, brand voice, integrations, workflow depth)',
+        'Differentiation: Conduct 5 competitive-learning interviews (where "just use ChatGPT" influenced outcomes); audit sales collateral for differentiation opportunities; build competitive matrix: Writer vs. ChatGPT Enterprise vs. Claude vs. Gemini (governance, brand voice, integrations, workflow depth)',
         'Capacity: Build SA Capacity Dashboard—deal count per SA, weighted pipeline, deal stage distribution, time-to-close; set yellow (18+ deals or 120% avg pipeline) and red (21+ or 140%) thresholds',
-        'Retention: Confidential 1:1s with each West Coast SA—what would make you stay 2 years? What energizes vs. drains? Identify flight risk levels; map career aspirations to growth opportunities',
+        'Retention: Confidential 1:1s with each West Coast SA—what would make you stay 2 years? What energizes vs. drains? Map retention focus and career aspirations to growth opportunities',
         'General SA: Shadow or interview top-performing SAs to identify which activities drive wins (discovery, demos, follow-up); review win/loss and deal-velocity data; document 3–5 repeatable patterns and draft "how the best SAs work" for playbook'
       ],
       risks: [
-        'Trying to fix everything at once without baseline clarity',
-        'SAs or partners not candid in interviews—missing real friction',
+        'Trying to address everything at once without baseline clarity',
+        'SAs or partners not surfacing key themes in interviews',
         'Dashboard built on incomplete or stale data',
         'Overpromising timelines before discovery complete'
       ],
@@ -2456,7 +2982,7 @@ const First30DaysSection = () => {
         'Partner Engagement Scorecard and tier definitions',
         'Competitive matrix and lost-deal summary',
         'SA Capacity Dashboard (yellow/red thresholds)',
-        'Retention 1:1 summary and flight-risk map',
+        'Retention 1:1 summary and retention-focus map',
         'General SA: Key activities of value summary; 3–5 repeatable patterns documented'
       ]
     },
@@ -2474,8 +3000,8 @@ const First30DaysSection = () => {
         'General SA: Turn key activities into templates or playbooks (discovery, demo, exit gates, handoffs); define replication cadence (enablement, coaching, content); pilot with 1–2 SAs and iterate'
       ],
       risks: [
-        'Pilot design too heavy—can\'t launch in 60 days',
-        'Partner kits too generic—partners don\'t use them',
+        'Pilot design scope—opportunity to launch in 60 days',
+        'Partner kits—opportunity to tailor so partners adopt them',
         'Objection playbook not grounded in real deal language',
         'Rebalancing triggers political pushback'
       ],
@@ -2508,8 +3034,8 @@ const First30DaysSection = () => {
         'General SA: Roll out playbook and replication cadence (enablement, coaching checkpoints, content); build feedback loop so wins and gaps continuously update the process; establish "key activities of value" as a standing team topic'
       ],
       risks: [
-        'Pilot metrics not tracked—can\'t prove value',
-        'Partner reviews become checkbox—no real accountability',
+        'Pilot metrics—opportunity to track and demonstrate value',
+        'Partner reviews—opportunity to build real accountability',
         'Enablement one-and-done—no reinforcement',
         'Capacity protocol not used when pressure hits'
       ],
@@ -2572,7 +3098,75 @@ const First30DaysSection = () => {
     'Build feedback loop so wins and gaps continuously update the process'
   ]);
 
-  // Update functions for phase data
+  const defaultPhases60_90 = [
+    {
+      days: 'Days 31–60',
+      title: 'Scale & Refine',
+      color: colors.success,
+      goal: 'Scale the West Coast pilot, refine playbooks and capacity protocol, deepen partner accountability and retention programs—so Day 60 outcomes are measurable and repeatable.',
+      keyActivities: [
+        'Partner SA: Run pilot with weekly retros; gather deal velocity, satisfaction, utilization data; build business case for broader rollout; document RACI learnings and shared-channel best practices',
+        'Partner Accountability: Monthly Partner Business Reviews with scorecard; Joint Account Planning for Tier 1; escalation path (2 months below minimums → exec-to-exec); partner dashboard visible to leadership',
+        'Differentiation: Second round of SA enablement on Objection Playbook; Win Story of the Week in Slack; competitive content in Seismic/Highspot; quarterly competitive intel refresh',
+        'Capacity: Weekly 15-min capacity check-in in standup; flex-capacity protocol when SA hits red (redistribution, AE communication); strategic-deal criteria documented',
+        'Retention: Monthly Impact Spotlight; path-to-Lead doc (deals, enablement, lighthouse); quarterly career conversations (separate from performance); Lighthouse Deal and Executive Shadow in motion',
+        'General SA: Playbook in use; replication cadence (enablement, coaching, content); feedback loop so wins and gaps update the process; "key activities of value" as standing team topic'
+      ]
+    },
+    {
+      days: 'Days 61–90',
+      title: 'Broaden & Embed',
+      color: colors.info,
+      goal: 'Broaden pilot rollout (if validated), embed rhythms and playbooks, and lock in talent and culture—so Day 90 sets the baseline for ongoing execution.',
+      keyActivities: [
+        'Partner SA: Broader rollout (if pilot success); consistent RACI and shared channels; Partner Specialist model refined; deal velocity and satisfaction tracked',
+        'Partner Accountability: Partner Engagement Scorecard and Tier 1/2/3 expectations embedded; monthly PBRs and Joint Account Planning standard; partner pipeline and close data in Salesforce',
+        'Differentiation: Objection Handling Playbook and vertical narratives in every deal; Win Story of the Week and competitive content refreshed; SA confidence on "Why Writer Wins"',
+        'Capacity: Capacity dashboard and weekly check-in standard; flex-capacity protocol used when needed; rebalancing by geo/vertical/velocity as needed',
+        'Retention: Impact Spotlight and path-to-Lead live; career conversations quarterly; Lighthouse Deal and Executive Shadow criteria refined; retention focus and aspirations tracked',
+        'General SA: Key activities of value and replication process embedded; playbook and enablement cadence part of team rhythm; continuous feedback loop'
+      ]
+    }
+  ];
+
+  const [phases60_90, setPhases60_90] = useLocalStorage('leadershipPlaybook_phases60_90', defaultPhases60_90);
+
+  const updatePhaseByIndex = (phaseIndex, field, value) => {
+    setPhases(prev => prev.map((p, i) => i === phaseIndex ? { ...p, [field]: value } : p));
+  };
+  const updatePhaseListItemByIndex = (phaseIndex, listKey, itemIndex, value) => {
+    setPhases(prev => prev.map((p, i) => i === phaseIndex ? { ...p, [listKey]: p[listKey].map((item, idx) => idx === itemIndex ? value : item) } : p));
+  };
+  const deletePhaseListItemByIndex = (phaseIndex, listKey, itemIndex) => {
+    setPhases(prev => prev.map((p, i) => i === phaseIndex ? { ...p, [listKey]: p[listKey].filter((_, idx) => idx !== itemIndex) } : p));
+  };
+  const addPhaseListItemByIndex = (phaseIndex, listKey) => {
+    setPhases(prev => prev.map((p, i) => i === phaseIndex ? { ...p, [listKey]: [...(p[listKey] || []), 'New item - click to edit'] } : p));
+  };
+
+  const updatePhase60_90Field = (phaseIndex, field, value) => {
+    setPhases60_90(prev => prev.map((p, i) => i === phaseIndex ? { ...p, [field]: value } : p));
+  };
+  const updatePhase60_90Activity = (phaseIndex, itemIndex, value) => {
+    setPhases60_90(prev => prev.map((p, i) => i === phaseIndex ? { ...p, keyActivities: p.keyActivities.map((item, idx) => idx === itemIndex ? value : item) } : p));
+  };
+  const deletePhase60_90Activity = (phaseIndex, itemIndex) => {
+    setPhases60_90(prev => prev.map((p, i) => i === phaseIndex ? { ...p, keyActivities: p.keyActivities.filter((_, idx) => idx !== itemIndex) } : p));
+  };
+  const addPhase60_90Activity = (phaseIndex) => {
+    setPhases60_90(prev => prev.map((p, i) => i === phaseIndex ? { ...p, keyActivities: [...p.keyActivities, 'New item - click to edit'] } : p));
+  };
+
+  // 30-60-90 timeline phases (for timeline + cards in detail view)
+  const timelinePhases306090 = [
+    { ...first30PhaseSummary, color: colors.accent },
+    phases60_90[0],
+    phases60_90[1]
+  ];
+
+  const updateFirst30PhaseSummary = (field, value) => setFirst30PhaseSummary(prev => ({ ...prev, [field]: value }));
+
+  // Update functions for phase data (kept for any legacy use; primary editing now via updatePhaseByIndex etc.)
   const updatePhaseField = (field, value) => {
     setPhases(prev => prev.map((phase, i) => 
       i === activePhase ? { ...phase, [field]: value } : phase
@@ -2608,212 +3202,102 @@ const First30DaysSection = () => {
 
   return (
     <div>
-      {/* Interactive D3 Timeline */}
-      <Card style={{ marginBottom: '24px', padding: '20px', backgroundColor: 'white' }}>
+      {/* 30-60-90 Timeline */}
+      <Card style={{ marginBottom: '24px', padding: '24px', backgroundColor: 'white', borderLeft: `4px solid ${colors.accent}` }}>
         <div style={{ marginBottom: '24px', textAlign: 'center' }}>
           <EditableText
             value={timelineTitle}
             onChange={(v) => setTimelineTitle(v)}
-            style={{ fontSize: '20px', fontWeight: '600', color: colors.text }}
+            style={{ fontSize: '18px', fontWeight: '600', color: colors.text }}
           />
         </div>
-        <InteractiveTimeline 
-          phases={phases} 
-          activePhase={activePhase} 
-          setActivePhase={setActivePhase} 
+        <InteractiveTimeline
+          phases={timelinePhases306090}
+          activePhase={activePhase}
+          setActivePhase={setActivePhase}
+          maxDays={90}
         />
       </Card>
 
-      {/* Active Phase Details */}
-      <Card style={{ borderLeft: `4px solid ${phases[activePhase].color}`, marginBottom: '24px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
-          <div style={{ flex: 1, minWidth: '200px' }}>
-            <EditableText
-              value={phases[activePhase].title}
-              onChange={(v) => updatePhaseField('title', v)}
-              style={{ fontSize: '20px', fontWeight: '600', color: colors.text, margin: '0 0 4px' }}
-            />
-            <EditableText
-              value={phases[activePhase].days}
-              onChange={(v) => updatePhaseField('days', v)}
-              style={{ fontSize: '12px', color: colors.textMuted, margin: 0 }}
-            />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '12px', fontWeight: '600', color: colors.textMuted }}>Goal:</span>
-            <EditableText
-              value={phases[activePhase].goal}
-              onChange={(v) => updatePhaseField('goal', v)}
-              style={{ 
-                fontSize: '12px', 
-                fontWeight: '600', 
-                color: phases[activePhase].color,
-                backgroundColor: phases[activePhase].color + '15',
-                padding: '6px 12px',
-                borderRadius: '100px',
-                maxWidth: '300px'
-              }}
-              multiline
-            />
-          </div>
-        </div>
-
-        <div style={{ marginBottom: '24px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-            <div style={{
-              width: '20px',
-              height: '20px',
-              borderRadius: '4px',
-              backgroundColor: phases[activePhase].color + '20',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '12px'
-            }}>
-              🎯
+      {/* Card for selected segment only (activePhase 0 = Days 1-30, 1 = 31-60, 2 = 61-90) */}
+      {activePhase === 0 && (
+        <Card style={{ marginBottom: '24px', padding: '24px', borderLeft: `4px solid ${colors.accent}` }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+            <div>
+              <div style={{ fontSize: '12px', fontWeight: '700', color: colors.accent, letterSpacing: '0.04em', marginBottom: '4px' }}>{first30PhaseSummary.days}</div>
+              <EditableText value={first30PhaseSummary.title} onChange={(v) => updateFirst30PhaseSummary('title', v)} style={{ fontSize: '18px', fontWeight: '600', color: colors.text, margin: 0 }} />
             </div>
-            <h5 style={{ fontSize: '14px', fontWeight: '600', color: colors.text, margin: 0 }}>Key Priorities</h5>
+            <EditableText value={first30PhaseSummary.goal} onChange={(v) => updateFirst30PhaseSummary('goal', v)} style={{ fontSize: '13px', fontWeight: '500', color: colors.accent, backgroundColor: colors.accent + '12', padding: '8px 14px', borderRadius: '8px', maxWidth: '100%', flex: '1 1 280px' }} multiline />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-            {phases[activePhase].priorities.map((item, i) => (
-              <EditableListItem
-                key={i}
-                value={item}
-                onChange={(v) => updatePhaseListItem('priorities', i, v)}
-                onDelete={() => deletePhaseListItem('priorities', i)}
-                color={phases[activePhase].color}
-                style={{
-                  padding: '8px',
-                  backgroundColor: i % 2 === 0 ? colors.surface : 'white',
-                  borderRadius: '6px'
-                }}
-              />
+          <div style={{ fontSize: '13px', fontWeight: '600', color: colors.textMuted, marginBottom: '12px' }}>Breakdown: Days 1-10, 11-20, 21-30</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+            {phases.map((phase, idx) => (
+              <div key={idx} style={{ padding: '16px', borderRadius: '12px', border: `2px solid ${phase.color}30`, backgroundColor: phase.color + '08' }}>
+                <div style={{ fontSize: '12px', fontWeight: '700', color: phase.color, marginBottom: '4px', letterSpacing: '0.04em' }}>{phase.days}</div>
+                <EditableText value={phase.title} onChange={(v) => updatePhaseByIndex(idx, 'title', v)} style={{ fontSize: '14px', fontWeight: '600', color: colors.text, marginBottom: '8px' }} />
+                <EditableText value={phase.goal} onChange={(v) => updatePhaseByIndex(idx, 'goal', v)} style={{ fontSize: '11px', color: colors.textSecondary, lineHeight: 1.5, marginBottom: '10px' }} multiline />
+                <div style={{ fontSize: '11px', fontWeight: '600', color: colors.textMuted, marginBottom: '6px' }}>Key Deliverables</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {(phase.keyDeliverables || []).map((item, i) => (
+                    <EditableListItem key={i} value={item} onChange={(v) => updatePhaseListItemByIndex(idx, 'keyDeliverables', i, v)} onDelete={() => deletePhaseListItemByIndex(idx, 'keyDeliverables', i)} color={phase.color} />
+                  ))}
+                  <AddItemButton onClick={() => addPhaseListItemByIndex(idx, 'keyDeliverables')} label="Add" />
+                </div>
+              </div>
             ))}
           </div>
-          <AddItemButton
-            onClick={() => addPhaseListItem('priorities')}
-            label="Add priority"
-          />
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
-          <div style={{
-            padding: '16px',
-            backgroundColor: colors.danger + '08',
-            borderRadius: '8px',
-            border: `1px solid ${colors.danger}20`
-          }}>
+          <div style={{ paddingTop: '16px', borderTop: `1px solid ${colors.border}` }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-              <div style={{
-                width: '20px',
-                height: '20px',
-                borderRadius: '4px',
-                backgroundColor: colors.danger + '20',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '12px'
-              }}>
-                ⚠️
-              </div>
-              <h5 style={{ fontSize: '14px', fontWeight: '600', color: colors.danger, margin: 0 }}>Risks</h5>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {phases[activePhase].risks.map((item, i) => (
-                <EditableListItem
-                  key={i}
-                  value={item}
-                  onChange={(v) => updatePhaseListItem('risks', i, v)}
-                  onDelete={() => deletePhaseListItem('risks', i)}
-                  color={colors.danger}
-                />
-              ))}
-            </div>
-            <AddItemButton
-              onClick={() => addPhaseListItem('risks')}
-              label="Add risk"
-            />
-          </div>
-          <div style={{
-            padding: '16px',
-            backgroundColor: colors.warning + '08',
-            borderRadius: '8px',
-            border: `1px solid ${colors.warning}20`
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-              <div style={{
-                width: '20px',
-                height: '20px',
-                borderRadius: '4px',
-                backgroundColor: colors.warning + '20',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '12px'
-              }}>
-                💭
-              </div>
-              <h5 style={{ fontSize: '14px', fontWeight: '600', color: colors.warning, margin: 0 }}>Assumptions</h5>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {phases[activePhase].assumptions.map((item, i) => (
-                <EditableListItem
-                  key={i}
-                  value={item}
-                  onChange={(v) => updatePhaseListItem('assumptions', i, v)}
-                  onDelete={() => deletePhaseListItem('assumptions', i)}
-                  color={colors.warning}
-                />
-              ))}
-            </div>
-            <AddItemButton
-              onClick={() => addPhaseListItem('assumptions')}
-              label="Add assumption"
-            />
-          </div>
-        </div>
-
-        {phases[activePhase].keyDeliverables && (
-          <div style={{ marginTop: '24px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-              <div style={{
-                width: '20px',
-                height: '20px',
-                borderRadius: '4px',
-                backgroundColor: phases[activePhase].color + '20',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '12px'
-              }}>
-                📦
-              </div>
-              <h5 style={{ fontSize: '14px', fontWeight: '600', color: colors.text, margin: 0 }}>Key Deliverables</h5>
+              <div style={{ width: '24px', height: '24px', borderRadius: '6px', backgroundColor: colors.success + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px' }}>✅</div>
+              <EditableText value={keyOutcomesTitle} onChange={(v) => setKeyOutcomesTitle(v)} style={{ fontSize: '15px', fontWeight: '600', color: colors.success, margin: 0 }} />
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-              {phases[activePhase].keyDeliverables.map((item, i) => (
-                <EditableListItem
-                  key={i}
-                  value={item}
-                  onChange={(v) => updatePhaseListItem('keyDeliverables', i, v)}
-                  onDelete={() => deletePhaseListItem('keyDeliverables', i)}
-                  color={phases[activePhase].color}
-                  style={{
-                    padding: '8px',
-                    backgroundColor: i % 2 === 0 ? phases[activePhase].color + '10' : 'white',
-                    borderRadius: '6px',
-                    border: `1px solid ${phases[activePhase].color}20`
-                  }}
-                />
+              {keyOutcomes.map((item, i) => (
+                <EditableListItem key={i} value={item} onChange={(v) => { const n = [...keyOutcomes]; n[i] = v; setKeyOutcomes(n); }} onDelete={() => setKeyOutcomes(keyOutcomes.filter((_, idx) => idx !== i))} color={colors.success} style={{ padding: '8px', backgroundColor: 'white', borderRadius: '6px' }} />
               ))}
             </div>
-            <AddItemButton
-              onClick={() => addPhaseListItem('keyDeliverables')}
-              label="Add deliverable"
-            />
+            <AddItemButton onClick={() => setKeyOutcomes([...keyOutcomes, 'New outcome - click to edit'])} label="Add outcome" />
           </div>
-        )}
-      </Card>
+        </Card>
+      )}
+
+      {activePhase === 1 && phases60_90[0] && (
+        <Card style={{ marginBottom: '24px', borderLeft: `4px solid ${phases60_90[0].color}` }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+            <div>
+              <div style={{ fontSize: '12px', fontWeight: '700', color: phases60_90[0].color, letterSpacing: '0.04em', marginBottom: '4px' }}>{phases60_90[0].days}</div>
+              <EditableText value={phases60_90[0].title} onChange={(v) => updatePhase60_90Field(0, 'title', v)} style={{ fontSize: '18px', fontWeight: '600', color: colors.text, margin: 0 }} />
+            </div>
+            <EditableText value={phases60_90[0].goal} onChange={(v) => updatePhase60_90Field(0, 'goal', v)} style={{ fontSize: '13px', fontWeight: '500', color: phases60_90[0].color, backgroundColor: phases60_90[0].color + '12', padding: '8px 14px', borderRadius: '8px', maxWidth: '100%', flex: '1 1 280px' }} multiline />
+          </div>
+          <div style={{ fontSize: '13px', fontWeight: '600', color: colors.textMuted, marginBottom: '10px' }}>Key Activities</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {phases60_90[0].keyActivities.map((item, i) => (
+              <EditableListItem key={i} value={item} onChange={(v) => updatePhase60_90Activity(0, i, v)} onDelete={() => deletePhase60_90Activity(0, i)} color={phases60_90[0].color} style={{ padding: '10px', backgroundColor: phases60_90[0].color + '08', borderRadius: '8px', border: `1px solid ${phases60_90[0].color}20` }} />
+            ))}
+            <AddItemButton onClick={() => addPhase60_90Activity(0)} label="Add activity" />
+          </div>
+        </Card>
+      )}
+
+      {activePhase === 2 && phases60_90[1] && (
+        <Card style={{ marginBottom: '24px', borderLeft: `4px solid ${phases60_90[1].color}` }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+            <div>
+              <div style={{ fontSize: '12px', fontWeight: '700', color: phases60_90[1].color, letterSpacing: '0.04em', marginBottom: '4px' }}>{phases60_90[1].days}</div>
+              <EditableText value={phases60_90[1].title} onChange={(v) => updatePhase60_90Field(1, 'title', v)} style={{ fontSize: '18px', fontWeight: '600', color: colors.text, margin: 0 }} />
+            </div>
+            <EditableText value={phases60_90[1].goal} onChange={(v) => updatePhase60_90Field(1, 'goal', v)} style={{ fontSize: '13px', fontWeight: '500', color: phases60_90[1].color, backgroundColor: phases60_90[1].color + '12', padding: '8px 14px', borderRadius: '8px', maxWidth: '100%', flex: '1 1 280px' }} multiline />
+          </div>
+          <div style={{ fontSize: '13px', fontWeight: '600', color: colors.textMuted, marginBottom: '10px' }}>Key Activities</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {phases60_90[1].keyActivities.map((item, i) => (
+              <EditableListItem key={i} value={item} onChange={(v) => updatePhase60_90Activity(1, i, v)} onDelete={() => deletePhase60_90Activity(1, i)} color={phases60_90[1].color} style={{ padding: '10px', backgroundColor: phases60_90[1].color + '08', borderRadius: '8px', border: `1px solid ${phases60_90[1].color}20` }} />
+            ))}
+            <AddItemButton onClick={() => addPhase60_90Activity(1)} label="Add activity" />
+          </div>
+        </Card>
+      )}
 
       {/* General SA: Key Activities of Value & Replication */}
       <Card style={{ marginBottom: '24px', borderLeft: `4px solid ${colors.info}` }}>
@@ -2878,53 +3362,6 @@ const First30DaysSection = () => {
             />
           </div>
         </div>
-      </Card>
-
-      {/* Key Outcomes by Day 30 */}
-      <Card style={{ backgroundColor: colors.success + '10', border: `1px solid ${colors.success}30` }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-          <div style={{ 
-            width: '32px', 
-            height: '32px', 
-            borderRadius: '8px', 
-            backgroundColor: colors.success + '20',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '16px'
-          }}>
-            ✅
-          </div>
-          <EditableText
-            value={keyOutcomesTitle}
-            onChange={(v) => setKeyOutcomesTitle(v)}
-            style={{ fontSize: '16px', fontWeight: '600', color: colors.success, margin: 0 }}
-          />
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-          {keyOutcomes.map((item, i) => (
-            <EditableListItem
-              key={i}
-              value={item}
-              onChange={(v) => {
-                const newOutcomes = [...keyOutcomes];
-                newOutcomes[i] = v;
-                setKeyOutcomes(newOutcomes);
-              }}
-              onDelete={() => setKeyOutcomes(keyOutcomes.filter((_, idx) => idx !== i))}
-              color={colors.success}
-              style={{ 
-                padding: '8px',
-                backgroundColor: 'white',
-                borderRadius: '6px'
-              }}
-            />
-          ))}
-        </div>
-        <AddItemButton 
-          onClick={() => setKeyOutcomes([...keyOutcomes, 'New outcome - click to edit'])} 
-          label="Add outcome" 
-        />
       </Card>
     </div>
   );
@@ -3250,29 +3687,29 @@ const MasonryItems = ({ items, columnCount, gap, expandedCards, toggleCard, getC
 // From the Field Section — three main dropdowns with general summary + cards inside
 const FromTheFieldSection = () => {
   const { isEditMode } = useContext(EditModeContext);
-  const [expandedCategories, setExpandedCategories] = useState({ collaboration: true, sales: true, agent: true });
+  const [expandedCategories, setExpandedCategories] = useState({ collaboration: false, sales: false, agent: false });
   const toggleCategory = (key) => setExpandedCategories(prev => ({ ...prev, [key]: !prev[key] }));
   const isCategoryExpanded = (key) => expandedCategories[key] !== false;
 
   const [collaborationSummary, setCollaborationSummary] = useLocalStorage('leadershipPlaybook_collaborationSummary',
-    'Field feedback points to lack of consistent SA/AE pairings, role ambiguity (demo execution vs. strategic partnership), and need for pod structures and clearer guidelines on when to engage SAs.'
+    'Field feedback points to opportunities for consistent SA/AE pairings, role clarity (demo execution vs. strategic partnership), and pod structures with clearer guidelines on when to engage SAs.'
   );
   const [salesProcessSummary, setSalesProcessSummary] = useLocalStorage('leadershipPlaybook_salesProcessSummary',
-    'Feedback highlights misaligned use case selection, POC process problems, pre-sales/post-sales disconnect, and missing standardized handoffs—information exists but isn\'t accessible or followed.'
+    'Feedback highlights opportunities in use case alignment, POC process focus areas, pre-sales/post-sales connection, and standardized handoffs—information exists but isn\'t accessible or followed.'
   );
   const [agentPositioningSummary, setAgentPositioningSummary] = useLocalStorage('leadershipPlaybook_agentPositioningSummary',
-    'Internal messaging positions Writer Agent as replacement rather than additional tool; need to highlight interconnectivity and fix demo loading/performance and differentiation story.'
+    'Internal messaging positions Writer Agent as replacement rather than additional tool; opportunity to highlight interconnectivity and improve demo loading/performance and differentiation story.'
   );
 
   const [collaborationGaps, setCollaborationGaps] = useLocalStorage('leadershipPlaybook_collaborationGaps', [
     {
-      category: 'Lack of Structured Partnerships',
-      description: 'The West team operates mostly on round-robin assignment rather than consistent SA/AE pairings. Success cases involve sustained multi-deal relationships, but this isn\'t systematized.',
+      category: 'Opportunity: Structured Partnerships',
+      description: 'The West team operates mostly on round-robin assignment rather than consistent SA/AE pairings. Success cases involve sustained multi-deal relationships, and we can systematize this.',
       source: 'Field Observations',
       issues: [
-        'West Coast lacks pod structures pairing SAs with specific AEs',
-        'Historical friction: "pre-sales built custom agents that post-sales team rebuilt from scratch"',
-        'Creates duplicate work cycles for customers'
+        'West Coast opportunity for pod structures pairing SAs with specific AEs',
+        'Historical theme: "pre-sales built custom agents that post-sales team rebuilt from scratch"',
+        'Opportunity to reduce duplicate work cycles for customers'
       ],
       recommendations: [
         'Implement pod structures with consistent SA/AE pairings',
@@ -3280,12 +3717,12 @@ const FromTheFieldSection = () => {
       ]
     },
     {
-      category: 'Role Ambiguity and Perception Issues',
-      description: 'SAs need "more strategic partnership vs. demo execution." There\'s a "gap between technical demo work and holistic ROI storytelling."',
+      category: 'Role Clarity and Perception',
+      description: 'SAs need "more strategic partnership vs. demo execution." There\'s an opportunity to close the gap between technical demo work and holistic ROI storytelling.',
       source: 'Natalie/Thomas, Maureen (SVP Partnerships)',
       issues: [
-        'SAs too reactive and siloed—need "proactive partnership vs \'demo monkey\' approach"',
-        'Lack of pod structure—random AE/SA pairings hurt relationship building',
+        'Opportunity for SAs to move from reactive to "proactive partnership vs \'demo monkey\' approach"',
+        'Opportunity for pod structure—consistent AE/SA pairings support relationship building',
         'Product so easy AEs can demo themselves, creating confusion about when to engage SAs',
         'Gap between technical demo work and holistic ROI storytelling'
       ],
@@ -3296,15 +3733,15 @@ const FromTheFieldSection = () => {
       ]
     },
     {
-      category: 'Partnership Quality Gaps',
-      description: 'Best SA partnerships bring "knowledge, thought leadership, credibility building." Current gaps include new hires lacking coaching and SAs not being proactive.',
+      category: 'Partnership Quality Opportunities',
+      description: 'Best SA partnerships bring "knowledge, thought leadership, credibility building." Opportunities include coaching for new hires and more proactive SA engagement.',
       source: 'Haley (Strat AE)',
       issues: [
-        'New hires "thrown into role as tech support" without coaching',
-        'SAs not "proactive in deal communication/strategy"',
-        'Bandwidth constraints limit strategic partnership',
-        'Need "strategic ownership vs. transactional support"',
-        'Require "continuous account engagement beyond scheduled meetings"'
+        'New hires "thrown into role as tech support" without coaching—opportunity to add structured onboarding',
+        'SAs not "proactive in deal communication/strategy"—opportunity to grow',
+        'Bandwidth considerations for strategic partnership',
+        'Opportunity for "strategic ownership vs. transactional support"',
+        'Opportunity for "continuous account engagement beyond scheduled meetings"'
       ],
       recommendations: [
         'Better onboarding for new SA hires with business acumen alongside technical skills',
@@ -3331,13 +3768,13 @@ const FromTheFieldSection = () => {
 
   const [salesProcessIssues, setSalesProcessIssues] = useLocalStorage('leadershipPlaybook_salesProcessIssues', [
     {
-      category: 'Misaligned Use Case Selection',
-      description: 'AEs "accept any use case for leverage, not necessarily Writer\'s best fit," resulting in "60-70% validation success, insufficient for compelling value story."',
+      category: 'Use Case Selection Alignment',
+      description: 'AEs "accept any use case for leverage, not necessarily Writer\'s best fit." Opportunity to improve validation success and compelling value story.',
       source: 'Laura (VP of SA)',
       issues: [
-        'Horizontal platform messaging "confuses differentiation from ChatGPT/Copilot"',
-        'Accepting any use case reduces validation success rate',
-        'Insufficient for compelling value story'
+        'Horizontal platform messaging—opportunity to clarify differentiation from ChatGPT/Copilot',
+        'Use case qualification—opportunity to improve validation success rate',
+        'Opportunity to strengthen compelling value story'
       ],
       recommendations: [
         'Develop clearer use case qualification criteria',
@@ -3346,16 +3783,16 @@ const FromTheFieldSection = () => {
       ]
     },
     {
-      category: 'POC Process Problems',
-      description: 'Technical team "spends excessive time on complex POCs never used in production." Content supply chain demos are "impressive but not scalable/implementable."',
+      category: 'POC Process Opportunities',
+      description: 'Technical team "spends significant time on complex POCs." Content supply chain demos are "impressive." Opportunity to improve scalability and implementability.',
       source: 'Laura (VP of SA), Thomas (RVP West)',
       issues: [
-        'Excessive time on complex POCs never used in production',
-        'Content supply chain demos impressive but not scalable/implementable',
-        'Prolonged evaluations: Bangkok Bank (1+ year), Microsoft Copilot Studio comparisons lacking urgency',
-        'Lack of executive sponsor alignment',
-        'No clear success criteria definition',
-        'No post-POC path agreement before starting'
+        'Opportunity to align POC scope with production use',
+        'Content supply chain demos impressive—opportunity to scale and implement',
+        'Evaluations: Bangkok Bank (1+ year), Microsoft Copilot Studio—opportunity to clarify urgency',
+        'Opportunity for executive sponsor alignment',
+        'Opportunity for clear success criteria definition',
+        'Opportunity for post-POC path agreement before starting'
       ],
       recommendations: [
         'Require executive sponsor alignment, clear success criteria, and post-POC path agreement before starting evaluations',
@@ -3368,10 +3805,10 @@ const FromTheFieldSection = () => {
       description: 'CSM team "transitioning from support to driving adoption/implementation" but "professional services underutilized." Recent deals lacking clear post-signature plan.',
       source: 'Thomas (RVP West)',
       issues: [
-        'Recent Intel deal "lacking clear post-signature plan"',
-        'Previous deals like Geisinger and Clorox were "wheelhouse use cases" but need "guardrails for what scales in post-sales vs. custom builds"',
-        'Professional services underutilized',
-        'CSM team transitioning but not fully aligned with pre-sales'
+        'Recent Intel deal—opportunity for clear post-signature plan',
+        'Previous deals like Geisinger and Clorox were "wheelhouse use cases"—opportunity for guardrails on what scales in post-sales vs. custom builds',
+        'Professional services—opportunity to increase utilization',
+        'CSM team transitioning—opportunity to align with pre-sales'
       ],
       recommendations: [
         'Establish guardrails for what scales in post-sales vs. custom builds',
@@ -3385,10 +3822,10 @@ const FromTheFieldSection = () => {
       description: '"No standardized handoff processes between AEs and SAs. Information exists but not accessible/followed by reps."',
       source: 'Garrett (RVP Central)',
       issues: [
-        'Exit gates and tactics documented but not referenced',
-        'Lack of muscle memory for successful deal closure process',
-        'Attributed to "schizophrenic go-to-market and product roadmap" due to product-market fit volatility',
-        'Information exists but not accessible/followed by reps'
+        'Exit gates and tactics documented—opportunity to make them referenced and accessible',
+        'Opportunity to build muscle memory for successful deal closure process',
+        'Product-market fit volatility affects go-to-market and product roadmap',
+        'Information exists—opportunity to make it accessible and followed by reps'
       ],
       recommendations: [
         'Create standardized handoff processes between AEs and SAs',
@@ -3401,19 +3838,19 @@ const FromTheFieldSection = () => {
 
   const [agentPositioning, setAgentPositioning] = useLocalStorage('leadershipPlaybook_agentPositioning', [
     {
-      category: 'Internal Messaging Issues',
-      description: '"Internal messaging wrong—positioned as replacement vs. additional tool."',
+      category: 'Internal Messaging Focus Areas',
+      description: 'Opportunity to position Writer Agent as additional tool vs. replacement.',
       source: 'Haley (Strat AE)',
       issues: [
-        'Positioned as replacement vs. additional tool',
-        'Missing "interconnectivity between Writer tools"',
-        'Loading/performance issues during demos',
-        'Lack of clear differentiation story vs. competitors'
+        'Opportunity to position as additional tool, not replacement',
+        'Opportunity to highlight "interconnectivity between Writer tools"',
+        'Opportunity to improve loading/performance during demos',
+        'Opportunity for clear differentiation story vs. competitors'
       ],
       recommendations: [
         'Reposition Writer Agent as additional tool, not replacement',
         'Highlight interconnectivity between Writer tools',
-        'Address loading/performance issues during demos',
+        'Improve loading/performance during demos',
         'Develop clear differentiation story vs. competitors'
       ]
     }
@@ -3649,7 +4086,7 @@ const FromTheFieldSection = () => {
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                   <div>
-                    <h5 style={{ fontSize: '14px', fontWeight: '600', color: colors.danger, marginBottom: '12px' }}>Issues</h5>
+                    <h5 style={{ fontSize: '14px', fontWeight: '600', color: colors.danger, marginBottom: '12px' }}>Opportunities</h5>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                       {gap.issues.map((item, i) => (
                         <EditableListItem
@@ -3661,7 +4098,7 @@ const FromTheFieldSection = () => {
                         />
                       ))}
                     </div>
-                    <AddItemButton onClick={() => addGapListItem(index, 'issues')} label="Add issue" />
+                    <AddItemButton onClick={() => addGapListItem(index, 'issues')} label="Add opportunity" />
                   </div>
                   <div>
                     <h5 style={{ fontSize: '14px', fontWeight: '600', color: colors.success, marginBottom: '12px' }}>Recommendations</h5>
@@ -3685,7 +4122,7 @@ const FromTheFieldSection = () => {
         )}
       </Card>
 
-      {/* Sales Process Issues — dropdown category */}
+      {/* Sales Process Opportunities — dropdown category */}
       <Card style={{ marginBottom: '24px', borderLeft: `4px solid ${colors.warning}` }}>
         <button
           type="button"
@@ -3704,7 +4141,7 @@ const FromTheFieldSection = () => {
           }}
         >
           <div style={{ flex: 1, minWidth: 0 }}>
-            <h3 style={{ fontSize: '24px', fontWeight: '600', color: colors.text, margin: 0 }}>Sales Process Issues</h3>
+            <h3 style={{ fontSize: '24px', fontWeight: '600', color: colors.text, margin: 0 }}>Sales Process Opportunities</h3>
             {!isCategoryExpanded('sales') && salesProcessSummary && (
               <p style={{ fontSize: '14px', color: colors.textSecondary, marginTop: '10px', marginBottom: 0, lineHeight: 1.5 }}>
                 {salesProcessSummary}
@@ -3785,7 +4222,7 @@ const FromTheFieldSection = () => {
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                   <div>
-                    <h5 style={{ fontSize: '14px', fontWeight: '600', color: colors.danger, marginBottom: '12px' }}>Issues</h5>
+                    <h5 style={{ fontSize: '14px', fontWeight: '600', color: colors.danger, marginBottom: '12px' }}>Opportunities</h5>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                       {issue.issues.map((item, i) => (
                         <EditableListItem
@@ -3797,7 +4234,7 @@ const FromTheFieldSection = () => {
                         />
                       ))}
                     </div>
-                    <AddItemButton onClick={() => addSalesIssueListItem(index, 'issues')} label="Add issue" />
+                    <AddItemButton onClick={() => addSalesIssueListItem(index, 'issues')} label="Add opportunity" />
                   </div>
                   <div>
                     <h5 style={{ fontSize: '14px', fontWeight: '600', color: colors.success, marginBottom: '12px' }}>Recommendations</h5>
@@ -3885,7 +4322,7 @@ const FromTheFieldSection = () => {
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                   <div>
-                    <h5 style={{ fontSize: '14px', fontWeight: '600', color: colors.danger, marginBottom: '12px' }}>Issues</h5>
+                    <h5 style={{ fontSize: '14px', fontWeight: '600', color: colors.danger, marginBottom: '12px' }}>Opportunities</h5>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                       {item.issues.map((issueItem, i) => (
                         <EditableListItem
@@ -3897,7 +4334,7 @@ const FromTheFieldSection = () => {
                         />
                       ))}
                     </div>
-                    <AddItemButton onClick={() => addAgentListItem(index, 'issues')} label="Add issue" />
+                    <AddItemButton onClick={() => addAgentListItem(index, 'issues')} label="Add opportunity" />
                   </div>
                   <div>
                     <h5 style={{ fontSize: '14px', fontWeight: '600', color: colors.success, marginBottom: '12px' }}>Recommendations</h5>
@@ -3955,7 +4392,7 @@ const TeamAnecdotesSection = () => {
       id: 3,
       date: '2024-11-19',
       sender: 'Mark Wilkinson',
-      content: 'Huge shoutout to @thai and @Chris Wheeler for jumping in late this evening to fix a Content Supply Chain blueprint that PwC was scheduled to present to 20+ Conagra executives tomorrow morning at 9am. They resolved multiple agents that got broken due to some LLM issues. They both put their heads together and got it done. Thank you both so much - love seeing our SA team in action 🙌',
+      content: 'Huge shoutout to @thai and @Chris Wheeler for jumping in late this evening to support a Content Supply Chain blueprint that PwC was scheduled to present to 20+ Conagra executives tomorrow morning at 9am. They resolved multiple agents that needed attention due to some LLM considerations. They both put their heads together and got it done. Thank you both so much - love seeing our SA team in action 🙌',
       reactions: { clap: 12, fire: 8 },
       category: 'problem-solving',
       highlight: 'Critical Issue Resolution'
@@ -4511,39 +4948,52 @@ const EditModeBanner = ({ isEditMode }) => {
 export default function App() {
   const [activeSection, setActiveSection] = useState('overview');
   const [isEditMode, setIsEditMode] = useState(false);
-  
+  const [detailViewSections, setDetailViewSections] = useState({
+    overview: false,
+    leadership: false,
+    hiring: false,
+    gtm: false,
+    operating: false,
+    first30: false,
+    field: false,
+    anecdotes: false
+  });
   const [sections, setSections] = useLocalStorage('leadershipPlaybook_sections', [
     { id: 'overview', label: 'Overview', title: 'Overview', subtitle: '' },
     { id: 'leadership', label: 'Leadership Principles', title: 'Leadership Principles', subtitle: 'My leadership philosophy and how it shows up day to day' },
-    { id: 'hiring', label: 'Hiring & Team Design', title: 'Hiring & Team Design', subtitle: 'The SA profile, balancing act, internal vs external hiring, and maintaining culture' },
-    { id: 'gtm', label: 'GTM & Impact', title: 'GTM & Impact Model', subtitle: 'How SAs drive impact pre- and post-sale, and adapt to strategy shifts' },
-    { id: 'operating', label: 'Operating & Coaching', title: 'Operating & Coaching Model', subtitle: 'Key metrics, team cadences, and how I uplevel SAs' },
-    { id: 'first30', label: 'First 30 Days', title: 'First 30 Days', subtitle: 'What I would aim to have in place (10 / 20 / 30 day focus), key priorities, risks and assumptions' },
     { id: 'field', label: 'From the Field', title: 'From the Field', subtitle: 'What we\'re hearing as working or not working in sales engagements and SA/AE partnerships' },
+    { id: 'gtm', label: 'GTM & Impact', title: 'GTM & Impact Model', subtitle: 'How SAs drive impact pre- and post-sale, and adapt to strategy shifts' },
+    { id: 'first30', label: '30-60-90', title: '30-60-90', subtitle: 'First 30 days: actions & plans; Days 31-60: scale & refine; Days 61-90: broaden & embed' },
+    { id: 'hiring', label: 'Hiring & Team Design', title: 'Hiring & Team Design', subtitle: 'The SA profile, balancing act, internal vs external hiring, and maintaining culture' },
+    { id: 'operating', label: 'Operating & Coaching', title: 'Operating & Coaching Model', subtitle: 'Key metrics, team cadences, and how I uplevel SAs' },
     { id: 'anecdotes', label: 'Team Anecdotes', title: 'Team Anecdotes', subtitle: 'Feedback and recognition from colleagues at Writer' },
   ]);
 
-  // Editable content state for Overview
+  // Editable content state for Overview (condensed, direct)
   const defaultOverviewContent = {
     subtitle: 'West Coast SA Manager | Leadership Panel',
     title: 'My Leadership Playbook',
-    description: 'Building and sustaining a high-performing West Coast SA team at Writer.',
+    description: 'High-performing West Coast SA team at Writer.',
     context: [
-      'West Coast SA leader role launching February; 3:1 AE-to-SA ratio holds, backfills tied to FY planning',
-      'Agent Builder sunsetting → team pivoting to Applications focus with deeper security/consultative positioning',
-      'Field feedback signals structural gaps: reactive siloed work, inconsistent SA/AE pairings, POC inefficiency, weak pre-to-post-sales handoffs'
+      'Backfill + headcount clarity for West Strat; maintain 3:1 AE:SA ratio.',
+      'Product Vision Changes: Agent Builder sunset; enable team on Writer Agent and platform changes.',
+      'Solutions Architecture scaffolding; reduce silos, create consistency.',
+      ''
     ],
     strategicBets: [
-      'Pod structures over round-robin: Consistent SA/AE pairings to build deeper account knowledge and multi-deal momentum',
-      'Process before scale: Standardized handoffs, POC templates, and clear exit gates—stop the "information exists but isn\'t accessible" problem',
-      'Coaching as infrastructure: Structured onboarding, post-mortems, and shadow programs to build repeatable excellence, not hero culture',
-      'Metrics that lead, not lag: Dashboard to validate what\'s working before doubling down'
+      'Pods over round-robin: consistent SA/AE pairings, deeper account knowledge.',
+      'Process before scale: handoffs, POC templates, exit gates so information is accessible.',
+      'Coaching as infrastructure: onboarding, post-mortems, shadow programs—repeatable excellence.',
+      'Leading metrics: dashboard to validate before scaling.'
     ],
     strategicPriorities: [
-      'Shift SAs from "demo monkey" to strategic partner (ROI storytelling, business acumen)',
-      'Fix Writer Agent positioning—complement, not replacement',
-      'Establish guardrails: what scales in post-sales vs. custom builds'
-    ]
+      'SAs as strategic partners: ROI storytelling, seat at the table in deal strategy and pipeline.',
+      'Consistent SA/AE pairings; early engagement, inclusion in forecast and account planning.',
+      'Technical voice of the deal: clear handoffs, shared exit criteria, joint ownership of validation.',
+      'Writer Agent: complement, not replacement; SAs lead technical narrative.',
+      'Guardrails for post-sales vs. custom builds; SAs focus on high-leverage work.'
+    ],
+    saLeadershipLens: DEFAULT_SA_LEADERSHIP_LENS
   };
 
   const [overviewContent, setOverviewContent] = useLocalStorage('leadershipPlaybook_overviewContent', defaultOverviewContent);
@@ -4647,42 +5097,46 @@ export default function App() {
                 </p>
               </div>
 
-              {/* Stats Row */}
-              <div style={{ 
-                display: 'grid', 
-                gridTemplateColumns: 'repeat(4, 1fr)', 
-                gap: '16px', 
-                marginBottom: '32px',
-                padding: '16px',
-                backgroundColor: colors.gray50,
-                borderRadius: '16px',
-                border: `1px solid ${colors.border}`
-              }}>
-                <StatCard value={4} label="Current SAs" color={colors.info} />
-                <StatCard value={3} suffix=":1" label="AE-to-SA Ratio" color={colors.accent} />
-                <StatCard value={40} label="Max Hours/Week" color={colors.warning} />
-                <StatCard value={30} label="Day Plan" color={colors.success} />
-              </div>
-
-              {/* Context, Strategic Bets, Strategic Priorities */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
-                <Card>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+              {/* Current State, Strategic Bets, Upleveling SAs — main overview components */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px', marginBottom: '32px' }}>
+                {/* Current State */}
+                <div style={{
+                  borderRadius: '16px',
+                  overflow: 'hidden',
+                  border: `2px solid ${colors.info}30`,
+                  backgroundColor: colors.bg,
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.02)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  minHeight: '280px'
+                }}>
+                  <div style={{
+                    padding: '20px 24px',
+                    background: `linear-gradient(135deg, ${colors.info}18 0%, ${colors.info}08 100%)`,
+                    borderBottom: `3px solid ${colors.info}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '14px'
+                  }}>
                     <div style={{
-                      width: '32px',
-                      height: '32px',
-                      borderRadius: '8px',
-                      backgroundColor: colors.info + '15',
+                      width: '48px',
+                      height: '48px',
+                      borderRadius: '12px',
+                      backgroundColor: colors.info,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      fontSize: '16px'
+                      fontSize: '24px',
+                      boxShadow: `0 4px 12px ${colors.info}40`
                     }}>
                       📋
                     </div>
-                    <h3 style={{ fontSize: '16px', fontWeight: '600', margin: 0, color: colors.text }}>Context</h3>
+                    <div>
+                      <div style={{ fontSize: '11px', fontWeight: '700', color: colors.info, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '2px' }}>Where we are</div>
+                      <h3 style={{ fontSize: '20px', fontWeight: '700', margin: 0, color: colors.text, letterSpacing: '-0.02em' }}>Current State</h3>
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ padding: '20px 24px', flex: 1, display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     {(overviewContent.context || []).map((p, i) => (
                       <EditableListItem
                         key={i}
@@ -4692,57 +5146,48 @@ export default function App() {
                         color={colors.info}
                       />
                     ))}
+                    <AddItemButton onClick={() => addOverviewListItem('context')} label="Add item" />
                   </div>
-                  <AddItemButton onClick={() => addOverviewListItem('context')} label="Add context" />
-                </Card>
+                </div>
 
-                <Card>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                {/* Upleveling SAs */}
+                <div style={{
+                  borderRadius: '16px',
+                  overflow: 'hidden',
+                  border: `2px solid ${colors.accent}30`,
+                  backgroundColor: colors.bg,
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.02)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  minHeight: '280px'
+                }}>
+                  <div style={{
+                    padding: '20px 24px',
+                    background: `linear-gradient(135deg, ${colors.accent}18 0%, ${colors.accent}08 100%)`,
+                    borderBottom: `3px solid ${colors.accent}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '14px'
+                  }}>
                     <div style={{
-                      width: '32px',
-                      height: '32px',
-                      borderRadius: '8px',
-                      backgroundColor: colors.success + '15',
+                      width: '48px',
+                      height: '48px',
+                      borderRadius: '12px',
+                      backgroundColor: colors.accent,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      fontSize: '16px'
-                    }}>
-                      🎯
-                    </div>
-                    <h3 style={{ fontSize: '16px', fontWeight: '600', margin: 0, color: colors.text }}>Strategic Bets</h3>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {(overviewContent.strategicBets || []).map((p, i) => (
-                      <EditableListItem
-                        key={i}
-                        value={p}
-                        onChange={(v) => updateOverviewListItem('strategicBets', i, v)}
-                        onDelete={() => deleteOverviewListItem('strategicBets', i)}
-                        color={colors.success}
-                      />
-                    ))}
-                  </div>
-                  <AddItemButton onClick={() => addOverviewListItem('strategicBets')} label="Add strategic bet" />
-                </Card>
-
-                <Card>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-                    <div style={{
-                      width: '32px',
-                      height: '32px',
-                      borderRadius: '8px',
-                      backgroundColor: colors.accent + '15',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '16px'
+                      fontSize: '24px',
+                      boxShadow: `0 4px 12px ${colors.accent}40`
                     }}>
                       🧭
                     </div>
-                    <h3 style={{ fontSize: '16px', fontWeight: '600', margin: 0, color: colors.text }}>Strategic Priorities</h3>
+                    <div>
+                      <div style={{ fontSize: '11px', fontWeight: '700', color: colors.accent, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '2px' }}>Where we're focused</div>
+                      <h3 style={{ fontSize: '20px', fontWeight: '700', margin: 0, color: colors.text, letterSpacing: '-0.02em' }}>Upleveling SAs</h3>
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ padding: '20px 24px', flex: 1, display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     {(overviewContent.strategicPriorities || []).map((p, i) => (
                       <EditableListItem
                         key={i}
@@ -4752,10 +5197,96 @@ export default function App() {
                         color={colors.accent}
                       />
                     ))}
+                    <AddItemButton onClick={() => addOverviewListItem('strategicPriorities')} label="Add item" />
                   </div>
-                  <AddItemButton onClick={() => addOverviewListItem('strategicPriorities')} label="Add priority" />
-                </Card>
+                </div>
+
+                {/* Strategic Bets */}
+                <div style={{
+                  borderRadius: '16px',
+                  overflow: 'hidden',
+                  border: `2px solid ${colors.success}30`,
+                  backgroundColor: colors.bg,
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.02)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  minHeight: '280px'
+                }}>
+                  <div style={{
+                    padding: '20px 24px',
+                    background: `linear-gradient(135deg, ${colors.success}18 0%, ${colors.success}08 100%)`,
+                    borderBottom: `3px solid ${colors.success}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '14px'
+                  }}>
+                    <div style={{
+                      width: '48px',
+                      height: '48px',
+                      borderRadius: '12px',
+                      backgroundColor: colors.success,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '24px',
+                      boxShadow: `0 4px 12px ${colors.success}40`
+                    }}>
+                      🎯
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '11px', fontWeight: '700', color: colors.success, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '2px' }}>Where we're betting</div>
+                      <h3 style={{ fontSize: '20px', fontWeight: '700', margin: 0, color: colors.text, letterSpacing: '-0.02em' }}>Strategic Bets</h3>
+                    </div>
+                  </div>
+                  <div style={{ padding: '20px 24px', flex: 1, display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {(overviewContent.strategicBets || []).map((p, i) => (
+                      <EditableListItem
+                        key={i}
+                        value={p}
+                        onChange={(v) => updateOverviewListItem('strategicBets', i, v)}
+                        onDelete={() => deleteOverviewListItem('strategicBets', i)}
+                        color={colors.success}
+                      />
+                    ))}
+                    <AddItemButton onClick={() => addOverviewListItem('strategicBets')} label="Add strategic bet" />
+                  </div>
+                </div>
               </div>
+
+              {/* SA Leadership Lens + four-pillar framework */}
+              <Card style={{ marginTop: '24px', borderLeft: `4px solid ${colors.purple}`, backgroundColor: colors.purple + '06' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+                  <div style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '8px',
+                    backgroundColor: colors.purple + '20',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '16px'
+                  }}>
+                    🔬
+                  </div>
+                  <h3 style={{ fontSize: '16px', fontWeight: '600', margin: 0, color: colors.text }}>What you'd adapt for SA leadership</h3>
+                </div>
+                <p style={{ fontSize: '12px', fontWeight: '700', color: colors.purple, marginBottom: '12px', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Framework: Identify → Action → Scale → SA Efficiency</p>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '20px' }}>
+                  {SA_LEADERSHIP_FRAMEWORK.map((pillar, i) => (
+                    <div key={i} style={{ padding: '12px 14px', borderRadius: '10px', border: `2px solid ${colors.purple}30`, backgroundColor: colors.purple + '10', fontSize: '13px', fontWeight: '600', color: colors.text }}>
+                      {pillar.label}
+                    </div>
+                  ))}
+                </div>
+                <p style={{ fontSize: '14px', color: colors.textSecondary, lineHeight: '1.7', margin: 0, whiteSpace: 'pre-wrap' }}>
+                  <EditableText
+                    value={overviewContent.saLeadershipLens ?? DEFAULT_SA_LEADERSHIP_LENS}
+                    onChange={(v) => updateOverviewContent('saLeadershipLens', v)}
+                    style={{ fontSize: '14px', color: colors.textSecondary }}
+                    multiline
+                  />
+                </p>
+              </Card>
             </div>
               );
             }
@@ -4766,10 +5297,51 @@ export default function App() {
               setSections(newSections);
             };
             
-            // For non-overview sections, show editable header
+            // For non-overview sections: summary first, or full content after "Double Click" (anecdotes has no summary)
+            // Sections in SECTIONS_WITHOUT_SUMMARY skip the summary card and always show full content
+            const SECTIONS_WITHOUT_SUMMARY = ['field', 'leadership', 'gtm', 'hiring', 'operating'];
             if (section.id !== 'overview') {
+              const sectionSummary = SECTION_SUMMARIES[section.id];
+              const skipSummaryForSection = SECTIONS_WITHOUT_SUMMARY.includes(section.id);
+              const showSummary = !skipSummaryForSection && section.id !== 'anecdotes' && !detailViewSections[section.id] && sectionSummary;
+              if (showSummary) {
+                return (
+                  <div key={section.id}>
+                    <SectionSummaryCard
+                      sectionNumber={sectionNumber}
+                      title={section.title || section.label}
+                      subtitle={section.subtitle}
+                      headline={sectionSummary.headline}
+                      summary={sectionSummary.summary}
+                      bullets={sectionSummary.bullets || []}
+                      timeline={sectionSummary.timeline}
+                      onShowDetail={() => setDetailViewSections(prev => ({ ...prev, [section.id]: true }))}
+                      sectionColor={section.color || colors.accent}
+                    />
+                  </div>
+                );
+              }
               return (
                 <div key={section.id}>
+                  {section.id !== 'anecdotes' && !skipSummaryForSection && (
+                    <div style={{ marginBottom: '16px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setDetailViewSections(prev => ({ ...prev, [section.id]: false }))}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: colors.textMuted,
+                          fontSize: '13px',
+                          cursor: 'pointer',
+                          padding: 0,
+                          textDecoration: 'underline'
+                        }}
+                      >
+                        ← Back to summary
+                      </button>
+                    </div>
+                  )}
                   <div style={{ marginBottom: '32px' }}>
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: '16px', marginBottom: '12px' }}>
                       <span style={{ 
